@@ -3,5 +3,8 @@ project(PDSProject)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -pthread" )
-
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I/usr/include/cppconn")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -L/usr/lib -lmysqlcppconn")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I/opt/boost_1_74_0")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I/opt/boost_1_74_0/stage/lib")
 add_executable(PDSProject main.cpp)
