@@ -1,20 +1,15 @@
 #include <iostream>
-/*
-  Include directly the different
-  headers from cppconn/ and mysql_driver.h + mysql_util.h
-  (and mysql_connection.h). This will reduce your build time!
-*/
+#include "mysql_connection.h"
 
-#include <mysql_connection.h>
-#include <driver.h>
-#include <exception.h>
-#include <resultset.h>
-#include <statement.h>
+#include <cppconn/driver.h>
+#include <cppconn/exception.h>
+#include <cppconn/resultset.h>
+#include <cppconn/statement.h>
+
 #include <boost/asio/ts/buffer.hpp>
 #include <boost/asio/ts/internet.hpp>
-#include <mysql_driver.h>
 #include "FileWatcher.h"
-
+using namespace sql;
 
 int main() {
     std::cout << "Client Program" << std::endl;
@@ -25,7 +20,7 @@ int main() {
         sql::Statement *stmt;
         sql::ResultSet *res;
         /* Create a connection */
-        driver = sql::mysql::get_driver_instance();
+        driver = get_driver_instance();
         con = driver->connect("tcp://127.0.0.1:3306", "root", "root");
         /* Connect to the MySQL test database */
         con->setSchema("test");
@@ -73,13 +68,8 @@ int main() {
         //std::string sRequest =
 
         //socket.write_some(asio::buffer(data,size,size... to do
-        // una volta aperto possiamo inviare al server con il nostro protocollo
 
     }
-
-
-   /* il programma non stoppa perche aspetta 5 secondi ogni volta, system watcher..eliminare questo commento dopo
-    * o metterlo in inglese */
 
 
     FileWatcher fw{"./",std::chrono::milliseconds(500)};
