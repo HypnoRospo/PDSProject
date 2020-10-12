@@ -1,58 +1,32 @@
 #include <iostream>
-#include "mysql_connection.h"
-
+#include <chrono>
 #include <cppconn/driver.h>
 #include <cppconn/exception.h>
 #include <cppconn/resultset.h>
 #include <cppconn/statement.h>
-
 #include <boost/asio/ts/buffer.hpp>
 #include <boost/asio/ts/internet.hpp>
-#include "FileWatcher.h"
-using namespace sql;
+#include <thread>
+
+using namespace  std::chrono_literals;
+std::vector<char> vBuffer(1*1024); //big buffer , regulate the speed and costs
+
+
+void getSomeData(boost::asio::ip::tcp::socket& socket);
+
 
 int main() {
     std::cout << "Client Program" << std::endl;
 
-    try {
-        sql::Driver *driver;
-        sql::Connection *con;
-        sql::Statement *stmt;
-        sql::ResultSet *res;
-        /* Create a connection */
-        driver = get_driver_instance();
-        con = driver->connect("tcp://127.0.0.1:3306", "root", "");
-        /* Connect to the MySQL test database */
-        con->setSchema("test");
-
-        stmt = con->createStatement();
-        res = stmt->executeQuery("SELECT 'Hello World!' AS _message");
-        while (res->next()) {
-            std::cout << "\t... MySQL replies: ";
-            /* Access column data by alias or column name */
-            std::cout << res->getString("_message") << std::endl;
-            std::cout << "\t... MySQL says it again: ";
-            /* Access column data by numeric offset, 1 is the first column */
-            std::cout << res->getString(1) << std::endl;
-        }
-        delete res;
-        delete stmt;
-        delete con;
-
-    } catch (sql::SQLException &e) {
-        std::cout << " (MySQL error code: " << e.getErrorCode();
-        std::cout << ", SQLState: " << e.getSQLState() << " )" << std::endl;
-    }
-
-
-
     /*network programming trying */
 
-
     boost::system::error_code ec;
-    boost::asio::io_context context;
-    boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::make_address("127.0.0.1",ec),80);
-    boost::asio::ip::tcp::socket  socket(context);
+    boost::asio::io_context context;//create a context essentially the platform specific interface
+    boost::asio::io_context::work idleWork(context); //fake tasks to asio so the context doesnt finish
+    std::thread thrContext = std::thread([&] () {context.run();}); //start context in background
+
+    boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::make_address("127.0.0.1",ec),5001);
+    boost::asio::ip::tcp::socket  socket(context); //the context will deliver the implementation
     socket.connect(endpoint,ec);
     if(!ec)
     {
@@ -65,34 +39,60 @@ int main() {
 
     if(socket.is_open())
     {
-        //std::string sRequest =
+        getSomeData(socket);
+        std::string string_Request = "GET prova\r\n";
+        socket.write_some(boost::asio::buffer(string_Request.data(),string_Request.size()),ec);
+        std::string string_Request_2 = "FINE\r\n";
+        socket.write_some(boost::asio::buffer(string_Request_2.data(),string_Request_2.size()),ec);
+        //diamo il tempo al server di rispondere
 
-        //socket.write_some(asio::buffer(data,size,size... to do
+        //codice SINCRONO. A NOI INTERESSA ASINCRONO
+
+        std::this_thread::sleep_for(2000ms);
+        //size_t bytes=socket.available();
+        //meglio usare wait
+
+        //but wait function isnt perfect -> switch to async
+
+        //std::cout<<"Bytes disponibili: " <<bytes << std::endl;
+
+       /*
+        if(bytes > 0)
+        {
+            std::vector<char> v_buffer(bytes);
+            socket.read_some(boost::asio::buffer(v_buffer.data(),v_buffer.size()),ec);
+            for (auto c: v_buffer)
+            {
+                std::cout<< c;
+            }
+
+        }
+       // std::string string_Request = "GET prova\r\n";
+        //socket.write_some(boost::asio::buffer(string_Request.data(),string_Request.size()),ec);
+        */
 
     }
 
-
-    FileWatcher fw{"./",std::chrono::milliseconds(500)};
-    // Start monitoring a folder for changes and (in case of changes)
-    // run a user provided lambda function
-    fw.start([](const std::string &path_to_watch,FileStatus status)-> void {
-        // Process only regular files, all other file types are ignored
-        if(!std::filesystem::is_regular_file(std::filesystem::path(path_to_watch))) //&& status != FileStatus::erased)
-            return;
-        switch(status) {
-            case FileStatus::created:
-                std::cout << "File created: " << path_to_watch << '\n';
-                break;
-            case FileStatus::modified:
-                std::cout << "File modified: " << path_to_watch << '\n';
-                break;
-            case FileStatus::erased:
-                std::cout << "File erased: " << path_to_watch << '\n';
-                break;
-            default:
-                std::cout << "Error! Unknown file status.\n";
-        }
-    });
-
+    thrContext.detach();
     return 0;
+}
+
+
+void getSomeData(boost::asio::ip::tcp::socket& socket)
+{
+
+    socket.async_read_some(boost::asio::buffer(vBuffer.data(),vBuffer.size()),
+                           [&](std::error_code ec,std::size_t length)
+                           {
+                               if(!ec)
+                               {
+                                   std::cout <<"\n\n Read " <<length << " bytes\n\n";
+                                   for( int i=0; i<length; i++)
+                                   {
+                                       std::cout << vBuffer[i];
+                                   }
+                                   getSomeData(socket); // isn't a real recursive but a system watching of network data.
+                               }
+                           }
+    );
 }
