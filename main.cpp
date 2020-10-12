@@ -72,8 +72,9 @@ int main() {
         */
 
     }
-
-    thrContext.detach();
+    context.stop();
+   if(thrContext.joinable())
+       thrContext.join();
     return 0;
 }
 
