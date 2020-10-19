@@ -39,7 +39,7 @@ namespace Message {
         message_header<T> header{};
         std::vector<uint8_t> body;
 
-        // returns size of entire message packet in bytes
+// returns size of entire message packet in bytes
         size_t size() const
         {
             return body.size();
@@ -65,14 +65,13 @@ namespace Message {
             // Check that the type of the data being pushed is trivially copyable
             static_assert(std::is_standard_layout<DataType>::value, "Data is too complex to be pushed into vector");
 
-            // Cache current size of vector, as this will be the point we insert the data
-            size_t i = msg.body.size();
-
             // Resize the vector by the size of the data being pushed
-            msg.body.resize(msg.body.size() + sizeof(DataType));
+            msg.body.clear();
 
             // Physically copy the data into the newly allocated vector space
-            std::memcpy(msg.body.data() + i, &data, sizeof(DataType));
+            //std::memcpy(msg.body.data(), &data, sizeof(DataType));
+
+            std::copy(data.begin(),data.end(),std::back_inserter(msg.body));
 
             // Recalculate the message size
             msg.header.size = msg.size();
@@ -110,7 +109,7 @@ namespace Message {
 
 enum class MsgType : uint32_t
 {
-   GET,
+   GET,UPDATE,LOGOUT,
 };
 
 #endif //PDSPROJECT_MESSAGE_H

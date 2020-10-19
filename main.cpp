@@ -19,15 +19,14 @@ boost::asio::io_context context;//create a context essentially the platform spec
 
 int main() {
     std::cout << "Client Program" << std::endl;
-
     /*network programming trying */
-
     try {
-        boost::asio::io_context::work idleWork(context); //fake tasks to asio so the context doesnt finish
-        std::thread thrContext = std::thread([&] () {context.run();}); //start context in background
+
+        boost::asio::io_context io_context;
+        //boost::asio::ip::tcp::resolver resolver(io_context); ci servira' probabilmente
 
         boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::make_address("127.0.0.1",ec),5000);
-        boost::asio::ip::tcp::socket  socket(context); //the context will deliver the implementation
+        boost::asio::ip::tcp::socket  socket(io_context); //the context will deliver the implementation
         socket.connect(endpoint,ec);
         if(!ec)
         {
@@ -38,33 +37,27 @@ int main() {
             std::cout << "Failed to connect to address:\n" << ec.message() <<std::endl;
         }
 
-        /*
         if(socket.is_open())
         {
 
-
             Message::message<MsgType> mex;
             mex.header.id=MsgType::GET;
-            mex << "GET prova\r\n";
+            std::string str="GET prova\r\n";
+            mex << str;
 
             boost::system::error_code ignored_error;
-            boost::asio::write(socket, boost::asio::buffer(&mex.header, sizeof(mex.header)), ignored_error);
-            socket.wait(boost::asio::ip::tcp::socket::wait_read);
+            //boost::asio::write(socket, boost::asio::buffer(&mex.header, sizeof(mex.header)), ignored_error);
+            //socket.wait(boost::asio::ip::tcp::socket::wait_read);
 
-            boost::asio::write(socket, boost::asio::buffer(mex.body.data(), sizeof(mex.size())), ignored_error);
-            socket.wait(boost::asio::ip::tcp::socket::wait_read);
+            boost::asio::write(socket, boost::asio::buffer(mex.body.data(), mex.body.size()), ignored_error);
+
             std::string message_2 = "FINE\r\n";
 
-            boost::asio::write(socket, boost::asio::buffer(message_2), ignored_error);
-            socket.wait(boost::asio::ip::tcp::socket::wait_read);
+            boost::asio::write(socket, boost::asio::buffer(message_2,message_2.size()), ignored_error);
             getSomeData(socket);
 
+            socket.wait(boost::asio::ip::tcp::socket::wait_read);
         }
-         */
-
-        context.stop();
-        if(thrContext.joinable())
-            thrContext.join();
     }
     catch (std::exception& e)
     {
@@ -87,16 +80,16 @@ void getSomeData(boost::asio::ip::tcp::socket& socket)
 
     for (;;)
     {
-        boost::array<char, 128> buf;
+        boost::array<char, 128> buffer;
         boost::system::error_code error;
 
-        size_t len = socket.read_some(boost::asio::buffer(buf), error);
+        size_t len = socket.read_some(boost::asio::buffer(buffer), error);
         if (error == boost::asio::error::eof)
             break; // Connection closed cleanly by peer.
         else if (error)
             throw boost::system::system_error(error); // Some other error.
 
-        //std::cout.write(buf.data(), len);
+        std::cout.write(buffer.data(), len);
     }
 
     //ho ricevuto tutto -> spacchetto logicamente
