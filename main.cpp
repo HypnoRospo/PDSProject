@@ -51,19 +51,17 @@ int main(int argc, char** argv) {
 
             std::cout <<"Login requested: " << std::endl;
 
-            Message::message<MsgType> login_message;
-            login_message.set_id(MsgType::LOGIN);
+            Message::message<MsgType> mex;
+            mex.set_id(MsgType::LOGIN);
             std::string user(argv[3]);
             std::string password(argv[4]);
-            std::string user_password = user+" "+password;
-            Message::message<MsgType> mex;
-            mex.set_id(MsgType::GET);
+            std::string user_password = user+" "+password+"\n";
             mex << user_password;
 
             //std::cout<<mex<<std::endl;
 
             boost::system::error_code ignored_error;
-            boost::asio::write(socket, boost::asio::buffer(&mex.header, sizeof(mex.header)), ignored_error);
+            boost::asio::write(socket, boost::asio::buffer(&mex.header.id, sizeof(mex.header.id)), ignored_error);
             boost::asio::write(socket, boost::asio::buffer(mex.body.data(), mex.body.size()), ignored_error);
             socket.wait(boost::asio::ip::tcp::socket::wait_read);
 
