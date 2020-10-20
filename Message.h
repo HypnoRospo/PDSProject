@@ -18,6 +18,12 @@
 #include <cstring>
 
 
+enum class MsgType : uint32_t
+{
+    BLANK,GET,LOGOUT,
+};
+
+
 namespace Message {
 
     // Message Header is sent at start of all messages. The template allows us
@@ -88,18 +94,15 @@ struct message
         // Physically copy the data from the vector into the user variable
         std::copy(msg.body.begin(), msg.body.end(), std::back_inserter(data));
 
-        // Return the target message so it can be "chained"
+        msg.header.id=MsgType::BLANK;
+        msg.header.size=0;
+        msg.body.clear();
         return msg;
     }
 
 };
+
 };
 
-
-
-enum class MsgType : uint32_t
-{
-   GET,UPDATE,LOGOUT,
-};
 
 #endif //PDSPROJECT_MESSAGE_H

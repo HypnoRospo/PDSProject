@@ -14,6 +14,7 @@ std::vector<char> vBuffer(1*1024); //big buffer , regulate the speed and costs
 
 
 void getSomeData(boost::asio::ip::tcp::socket& socket);
+
 boost::system::error_code ec;
 boost::asio::io_context context;//create a context essentially the platform specific interface
 
@@ -45,12 +46,9 @@ int main() {
             std::string str="GET prova\r\n";
             mex << str;
 
-            std::string cia="Ciao";
-            mex <<cia;
-
             std::vector<char> prova;
-
             mex >> prova;
+
 
             boost::system::error_code ignored_error;
             //boost::asio::write(socket, boost::asio::buffer(&mex.header, sizeof(mex.header)), ignored_error);
