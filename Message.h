@@ -29,83 +29,72 @@ namespace Message {
         uint32_t size = 0;
     };
 
-    // Message Body contains a header and a std::vector, containing raw bytes
-    // of infomation. This way the message can be variable length, but the size
-    // in the header must be updated.
-    template <typename T>
-    struct message
-    {
-        // Header & Body vector
-        message_header<T> header{};
-        std::vector<char> body;
+// Message Body contains a header and a std::vector, containing raw bytes
+// of infomation. This way the message can be variable length, but the size
+// in the header must be updated.
+template <typename T>
+struct message
+{
+    // Header & Body vector
+    message_header<T> header{};
+    std::vector<char> body;
 
 // returns size of entire message packet in bytes
-        size_t size() const
-        {
-            return body.size();
-        }
+    size_t size() const
+    {
+        return body.size();
+    }
 
-        // Override for std::cout compatibility - produces friendly description of message
-        friend std::ostream& operator << (std::ostream& os, const message<T>& msg)
-        {
-            os << "ID:" << int(msg.header.id) << " Size:" << msg.header.size;
-            return os;
-        }
+    // Override for std::cout compatibility - produces friendly description of message
+    friend std::ostream& operator << (std::ostream& os, const message<T>& msg)
+    {
+        os << "ID:" << int(msg.header.id) << " Size:" << msg.header.size;
+        return os;
+    }
 
-        // Convenience Operator overloads - These allow us to add and remove stuff from
-        // the body vector as if it were a stack, so First in, Last Out. These are a
-        // template in itself, because we dont know what data type the user is pushing or
-        // popping, so lets allow them all. NOTE: It assumes the data type is fundamentally
-        // Plain Old Data (POD). TLDR: Serialise & Deserialise into/from a vector
+    // Convenience Operator overloads - These allow us to add and remove stuff from
+    // the body vector as if it were a stack, so First in, Last Out. These are a
+    // template in itself, because we dont know what data type the user is pushing or
+    // popping, so lets allow them all. NOTE: It assumes the data type is fundamentally
+    // Plain Old Data (POD). TLDR: Serialise & Deserialise into/from a vector
 
-        // Pushes any POD-like data into the message buffer
-        template<typename DataType>
-        friend message<T>& operator << (message<T>& msg, const DataType& data)
-        {
-            // Check that the type of the data being pushed is trivially copyable
-            static_assert(std::is_standard_layout<DataType>::value, "Data is too complex to be pushed into vector");
+    // Pushes any POD-like data into the message buffer
+    template<typename DataType>
+    friend message<T>& operator << (message<T>& msg, const DataType& data)
+    {
+        // Check that the type of the data being pushed is trivially copyable
+        static_assert(std::is_standard_layout<DataType>::value, "Data is too complex to be pushed into vector");
 
-            // Cache current size of vector, as this will be the point we insert the data
-            size_t i = msg.body.size();
+        // Resize the vector by the size of the data being pushed
+        msg.body.resize(data.size());
 
-            // Resize the vector by the size of the data being pushed
-            msg.body.resize(msg.body.size() + data.size());
+        // Physically copy the data into the newly allocated vector space
+        std::copy(data.begin(), data.end(), msg.body.begin());
 
-            // Physically copy the data into the newly allocated vector space
-            std::copy(data.begin(), data.end(), msg.body.begin() + i);
+        // Recalculate the message size
+        msg.header.size = msg.size();
 
-            // Recalculate the message size
-            msg.header.size = msg.size();
+        // Return the target message so it can be "chained"
+        return msg;
+    }
 
-            // Return the target message so it can be "chained"
-            return msg;
-        }
+    // Pulls any POD-like data form the message buffer
+    template<typename DataType>
+    friend message<T>& operator >> (message<T>& msg, DataType& data)
+    {
+        // Check that the type of the data being pushed is trivially copyable
+        static_assert(std::is_standard_layout<DataType>::value, "Data is too complex to be pulled from vector");
 
-        // Pulls any POD-like data form the message buffer
-        template<typename DataType>
-        friend message<T>& operator >> (message<T>& msg, DataType& data)
-        {
-            // Check that the type of the data being pushed is trivially copyable
-            static_assert(std::is_standard_layout<DataType>::value, "Data is too complex to be pulled from vector");
+        // Physically copy the data from the vector into the user variable
+        std::copy(msg.body.begin(), msg.body.end(), std::back_inserter(data));
 
-            // Cache the location towards the end of the vector where the pulled data starts
-            size_t i = msg.body.size() - data.size();
-
-            // Physically copy the data from the vector into the user variable
-            std::copy(msg.body.begin() + i, msg.body.end(), data.begin());
-
-            // Shrink the vector to remove read bytes, and reset end position
-            msg.body.resize(i);
-
-            // Recalculate the message size
-            msg.header.size = msg.size();
-
-            // Return the target message so it can be "chained"
-            return msg;
-        }
-    };
+        // Return the target message so it can be "chained"
+        return msg;
+    }
 
 };
+};
+
 
 
 enum class MsgType : uint32_t

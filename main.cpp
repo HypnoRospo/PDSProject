@@ -45,6 +45,13 @@ int main() {
             std::string str="GET prova\r\n";
             mex << str;
 
+            std::string cia="Ciao";
+            mex <<cia;
+
+            std::vector<char> prova;
+
+            mex >> prova;
+
             boost::system::error_code ignored_error;
             //boost::asio::write(socket, boost::asio::buffer(&mex.header, sizeof(mex.header)), ignored_error);
             //socket.wait(boost::asio::ip::tcp::socket::wait_read);
