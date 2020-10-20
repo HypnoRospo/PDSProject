@@ -37,7 +37,7 @@ namespace Message {
     {
         // Header & Body vector
         message_header<T> header{};
-        std::vector<uint8_t> body;
+        std::vector<char> body;
 
 // returns size of entire message packet in bytes
         size_t size() const
@@ -65,13 +65,14 @@ namespace Message {
             // Check that the type of the data being pushed is trivially copyable
             static_assert(std::is_standard_layout<DataType>::value, "Data is too complex to be pushed into vector");
 
+            // Cache current size of vector, as this will be the point we insert the data
+            size_t i = msg.body.size();
+
             // Resize the vector by the size of the data being pushed
-            msg.body.clear();
+            msg.body.resize(msg.body.size() + data.size());
 
             // Physically copy the data into the newly allocated vector space
-            //std::memcpy(msg.body.data(), &data, sizeof(DataType));
-
-            std::copy(data.begin(),data.end(),std::back_inserter(msg.body));
+            std::copy(data.begin(), data.end(), msg.body.begin() + i);
 
             // Recalculate the message size
             msg.header.size = msg.size();
@@ -88,10 +89,10 @@ namespace Message {
             static_assert(std::is_standard_layout<DataType>::value, "Data is too complex to be pulled from vector");
 
             // Cache the location towards the end of the vector where the pulled data starts
-            size_t i = msg.body.size() - sizeof(DataType);
+            size_t i = msg.body.size() - data.size();
 
             // Physically copy the data from the vector into the user variable
-            std::memcpy(&data, msg.body.data() + i, sizeof(DataType));
+            std::copy(msg.body.begin() + i, msg.body.end(), data.begin());
 
             // Shrink the vector to remove read bytes, and reset end position
             msg.body.resize(i);
