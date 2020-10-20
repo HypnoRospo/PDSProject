@@ -18,20 +18,28 @@ void getSomeData(boost::asio::ip::tcp::socket& socket);
 boost::system::error_code ec;
 boost::asio::io_context context;//create a context essentially the platform specific interface
 
-int main() {
+int main(int argc, char** argv) {
     std::cout << "Client Program" << std::endl;
     /*network programming trying */
+
+    if( argc!=5 )
+    {
+        std::cout<<"Errore numero parametri linea di comando"<<std::endl;
+        exit(EXIT_FAILURE);
+    }
+
     try {
 
         boost::asio::io_context io_context;
         //boost::asio::ip::tcp::resolver resolver(io_context); ci servira' probabilmente
 
-        boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::make_address("127.0.0.1",ec),5000);
+        boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::make_address(argv[1],ec),atoi(argv[2]));
         boost::asio::ip::tcp::socket  socket(io_context); //the context will deliver the implementation
         socket.connect(endpoint,ec);
+
         if(!ec)
         {
-            std::cout <<"Connected " << std::endl;
+            std::cout <<"Connected to the Server" << std::endl;
         }
         else
         {
@@ -41,27 +49,28 @@ int main() {
         if(socket.is_open())
         {
 
+            std::cout <<"Login requested: " << std::endl;
+
+            Message::message<MsgType> login_message;
+            login_message.set_id(MsgType::LOGIN);
+            std::string user(argv[3]);
+            std::string password(argv[4]);
+            std::string user_password = user+" "+password;
             Message::message<MsgType> mex;
-            mex.header.id=MsgType::GET;
-            std::string str="GET prova\r\n";
-            mex << str;
+            mex.set_id(MsgType::GET);
+            mex << user_password;
 
-            std::vector<char> prova;
-            mex >> prova;
-
+            //std::cout<<mex<<std::endl;
 
             boost::system::error_code ignored_error;
-            //boost::asio::write(socket, boost::asio::buffer(&mex.header, sizeof(mex.header)), ignored_error);
-            //socket.wait(boost::asio::ip::tcp::socket::wait_read);
-
+            boost::asio::write(socket, boost::asio::buffer(&mex.header, sizeof(mex.header)), ignored_error);
             boost::asio::write(socket, boost::asio::buffer(mex.body.data(), mex.body.size()), ignored_error);
+            socket.wait(boost::asio::ip::tcp::socket::wait_read);
 
             std::string message_2 = "FINE\r\n";
-
             boost::asio::write(socket, boost::asio::buffer(message_2,message_2.size()), ignored_error);
-            getSomeData(socket);
 
-            socket.wait(boost::asio::ip::tcp::socket::wait_read);
+            getSomeData(socket);
         }
     }
     catch (std::exception& e)

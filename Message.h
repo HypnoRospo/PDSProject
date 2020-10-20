@@ -20,7 +20,7 @@
 
 enum class MsgType : uint32_t
 {
-    BLANK,GET,LOGOUT,
+    BLANK,GET,LOGIN,LOGOUT,
 };
 
 
@@ -54,7 +54,8 @@ struct message
     // Override for std::cout compatibility - produces friendly description of message
     friend std::ostream& operator << (std::ostream& os, const message<T>& msg)
     {
-        os << "ID:" << int(msg.header.id) << " Size:" << msg.header.size;
+        os << "ID:" << int(msg.header.id) << " Size:" << msg.header.size <<std::endl;
+        os << "BODY: " << msg.body.data() <<std::endl;
         return os;
     }
 
@@ -100,6 +101,9 @@ struct message
         return msg;
     }
 
+    void set_id(MsgType type) {
+        this->header.id=type;
+    }
 };
 
 };
