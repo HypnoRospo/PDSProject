@@ -50,6 +50,7 @@ int main(int argc, char** argv) {
         {
 
             std::cout <<"Login requested: " << std::endl;
+            boost::system::error_code ignored_error;
 
             Message::message<MsgType> mex;
             mex.set_id(MsgType::LOGIN);
@@ -58,15 +59,26 @@ int main(int argc, char** argv) {
             std::string user_password = user+" "+password+"\n";
             mex << user_password;
 
-            //std::cout<<mex<<std::endl;
 
-            boost::system::error_code ignored_error;
             boost::asio::write(socket, boost::asio::buffer(&mex.header.id, sizeof(mex.header.id)), ignored_error);
             boost::asio::write(socket, boost::asio::buffer(mex.body.data(), mex.body.size()), ignored_error);
+
+
+            Message::message<MsgType> get_data;
+            get_data.set_id(MsgType::GETPATH);
+            std::string get_str("GET prova\r\n");
+            get_data << get_str;
+            boost::asio::write(socket, boost::asio::buffer(&get_data.header.id, sizeof(get_data.header.id)), ignored_error);
+            boost::asio::write(socket, boost::asio::buffer(get_data.body.data(), get_data.body.size()), ignored_error);
             socket.wait(boost::asio::ip::tcp::socket::wait_read);
 
-            std::string message_2 = "FINE\r\n";
-            boost::asio::write(socket, boost::asio::buffer(message_2,message_2.size()), ignored_error);
+            Message::message<MsgType> fine;
+            fine.set_id(MsgType::LOGOUT);
+            //std::string fine_str("FINE\r\n");
+            //fine << fine_str;
+            boost::asio::write(socket, boost::asio::buffer(&fine.header.id, sizeof(fine.header.id)), ignored_error);
+            //boost::asio::write(socket, boost::asio::buffer(fine.body.data(), fine.body.size()), ignored_error);
+            //cose commentate superflue, basta header
 
             getSomeData(socket);
         }
@@ -78,6 +90,7 @@ int main(int argc, char** argv) {
     return 0;
 }
 
+/*
 void Send(const Message::message<MsgType>& msg)
 {
     boost::asio::post(context,
@@ -86,6 +99,7 @@ void Send(const Message::message<MsgType>& msg)
 
                });
 }
+ */
 
 void getSomeData(boost::asio::ip::tcp::socket& socket)
 {
