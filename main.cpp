@@ -16,11 +16,11 @@
 #include "Message.h"
 using namespace  std::chrono_literals;
 std::vector<char> vBuffer(1*1024); //big buffer , regulate the speed and costs
-
+unsigned char key[crypto_secretbox_KEYBYTES] ={"pds_project_key"};
+unsigned char nonce[crypto_secretbox_NONCEBYTES]={"prova_nonce"};
 void getSomeData(boost::asio::ip::tcp::socket& socket);
 
 boost::system::error_code ec;
-boost::asio::io_context context;//create a context essentially the platform specific interface
 
 int main(int argc, char** argv) {
     std::cout << "Client Program" << std::endl;
@@ -55,24 +55,20 @@ int main(int argc, char** argv) {
 
             std::cout <<"Login requested: " << std::endl;
             boost::system::error_code ignored_error;
-
+            std::vector<unsigned char> cipher_vect;
             Message::message<MsgType> mex;
             mex.set_id(MsgType::LOGIN);
             std::string user(argv[3]);
             std::string password(argv[4]);
-
-            unsigned char key[crypto_secretbox_KEYBYTES];
-            unsigned char nonce[crypto_secretbox_NONCEBYTES];
-            unsigned char ciphertext[crypto_secretbox_MACBYTES + password.length()];
-
-            crypto_secretbox_keygen(key);
-            randombytes_buf(nonce, sizeof nonce);
-            crypto_secretbox_easy(ciphertext, reinterpret_cast<const unsigned char *>(argv[4]), password.length(), nonce, key);
-
-            std::string user_password = user+" "+password+"\n";
-            mex << user_password;
-
-
+            std::string user_password = user+" "+password;
+            size_t c_len =crypto_secretbox_MACBYTES + user_password.length();
+            unsigned char ciphertext[c_len];
+            //crypto_secretbox_keygen(key);
+            //randombytes_buf(nonce, sizeof nonce);
+            crypto_secretbox_easy(ciphertext, reinterpret_cast<const unsigned char *>(user_password.data()), user_password.length(), nonce, key);
+            cipher_vect.assign(ciphertext,ciphertext+c_len);
+            cipher_vect.push_back('\n'); //terminatore, importante senno dobbiamo ricopiare un'altra leggi comadno
+            mex << cipher_vect;
             boost::asio::write(socket, boost::asio::buffer(&mex.header.id, sizeof(mex.header.id)), ignored_error);
             boost::asio::write(socket, boost::asio::buffer(mex.body.data(), mex.body.size()), ignored_error);
 
