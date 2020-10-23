@@ -8,10 +8,14 @@
 #include <boost/asio/ts/internet.hpp>
 #include <boost/array.hpp>
 #include <thread>
+#include <sodium.h>
+#include <sodium/crypto_pwhash.h>
+#include <sodium/crypto_auth.h>
+#include <sodium/crypto_secretbox.h>
+#include <sodium/randombytes.h>
 #include "Message.h"
 using namespace  std::chrono_literals;
 std::vector<char> vBuffer(1*1024); //big buffer , regulate the speed and costs
-
 
 void getSomeData(boost::asio::ip::tcp::socket& socket);
 
@@ -56,13 +60,21 @@ int main(int argc, char** argv) {
             mex.set_id(MsgType::LOGIN);
             std::string user(argv[3]);
             std::string password(argv[4]);
+
+            unsigned char key[crypto_secretbox_KEYBYTES];
+            unsigned char nonce[crypto_secretbox_NONCEBYTES];
+            unsigned char ciphertext[crypto_secretbox_MACBYTES + password.length()];
+
+            crypto_secretbox_keygen(key);
+            randombytes_buf(nonce, sizeof nonce);
+            crypto_secretbox_easy(ciphertext, reinterpret_cast<const unsigned char *>(argv[4]), password.length(), nonce, key);
+
             std::string user_password = user+" "+password+"\n";
             mex << user_password;
 
 
             boost::asio::write(socket, boost::asio::buffer(&mex.header.id, sizeof(mex.header.id)), ignored_error);
             boost::asio::write(socket, boost::asio::buffer(mex.body.data(), mex.body.size()), ignored_error);
-
 
             Message::message<MsgType> get_data;
             get_data.set_id(MsgType::GETPATH);
