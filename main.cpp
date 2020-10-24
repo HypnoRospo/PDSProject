@@ -17,7 +17,7 @@
 using namespace  std::chrono_literals;
 std::vector<char> vBuffer(1*1024); //big buffer , regulate the speed and costs
 unsigned char key[crypto_secretbox_KEYBYTES] ={"pds_project_key"};
-unsigned char nonce[crypto_secretbox_NONCEBYTES]={"prova_nonce"};
+unsigned char nonce[crypto_secretbox_NONCEBYTES]={};
 void getSomeData(boost::asio::ip::tcp::socket& socket);
 
 boost::system::error_code ec;
@@ -64,8 +64,19 @@ int main(int argc, char** argv) {
             size_t c_len =crypto_secretbox_MACBYTES + user_password.length();
             unsigned char ciphertext[c_len];
             //crypto_secretbox_keygen(key);
-            //randombytes_buf(nonce, sizeof nonce);
-            crypto_secretbox_easy(ciphertext, reinterpret_cast<const unsigned char *>(user_password.data()), user_password.length(), nonce, key);
+
+            randombytes_buf(nonce, sizeof nonce);
+            Message::message<MsgType> nonce_msg;
+            nonce_msg.set_id(MsgType::NONCE);
+            std::vector<char> nonce_container;
+            std::copy(&nonce[0],&nonce[crypto_secretbox_NONCEBYTES],std::back_inserter(nonce_container));
+            nonce_container.push_back('\n');
+            nonce_msg << nonce_container;
+            boost::asio::write(socket, boost::asio::buffer(&nonce_msg.header.id, sizeof(nonce_msg.header.id)), ignored_error);
+            boost::asio::write(socket, boost::asio::buffer(nonce_msg.body.data(), nonce_msg.body.size()), ignored_error);
+
+
+            crypto_secretbox_easy(ciphertext, reinterpret_cast<const unsigned char *>(user_password.c_str()), user_password.length(), nonce, key);
             cipher_vect.assign(ciphertext,ciphertext+c_len);
             cipher_vect.push_back('\n'); //terminatore, importante senno dobbiamo ricopiare un'altra leggi comadno
             mex << cipher_vect;
