@@ -23,6 +23,7 @@ void getSomeData(boost::asio::ip::tcp::socket& socket);
 boost::system::error_code ec;
 
 int main(int argc, char** argv) {
+
     std::cout << "Client Program" << std::endl;
     /*network programming trying */
 
@@ -63,25 +64,20 @@ int main(int argc, char** argv) {
             std::string usr_psw = usr+" "+psw;
             size_t c_len_r =crypto_secretbox_MACBYTES + usr_psw.length();
             unsigned char ciphertext_r[c_len_r];
-            //crypto_secretbox_keygen(key);
 
-            randombytes_buf(nonce, sizeof nonce);
+            crypto_secretbox_keygen(nonce);
+
             Message::message<MsgType> nonce_msg_r;
             nonce_msg_r.set_id(MsgType::NONCE);
             std::vector<char> nonce_container_r;
             std::copy(&nonce[0],&nonce[crypto_secretbox_NONCEBYTES],std::back_inserter(nonce_container_r));
-            nonce_container_r.push_back('\n');
             nonce_msg_r << nonce_container_r;
-            boost::asio::write(socket, boost::asio::buffer(&nonce_msg_r.header.id, sizeof(nonce_msg_r.header.id)), ignored_error);
-            boost::asio::write(socket, boost::asio::buffer(nonce_msg_r.body.data(), nonce_msg_r.body.size()), ignored_error);
-
+            nonce_msg_r.sendMessage(socket);
 
             crypto_secretbox_easy(ciphertext_r, reinterpret_cast<const unsigned char *>(usr_psw.c_str()), usr_psw.length(), nonce, key);
             cipher_vect_r.assign(ciphertext_r,ciphertext_r+c_len_r);
-            cipher_vect_r.push_back('\n'); //terminatore, importante senno dobbiamo ricopiare un'altra leggi comadno
             mex_r << cipher_vect_r;
-            boost::asio::write(socket, boost::asio::buffer(&mex_r.header.id, sizeof(mex_r.header.id)), ignored_error);
-            boost::asio::write(socket, boost::asio::buffer(mex_r.body.data(), mex_r.body.size()), ignored_error);
+            mex_r.sendMessage(socket);
 
 
             std::cout <<"Login requested: " << std::endl;
@@ -95,36 +91,32 @@ int main(int argc, char** argv) {
             unsigned char ciphertext[c_len];
             //crypto_secretbox_keygen(key);
 
-            randombytes_buf(nonce, sizeof nonce);
+            crypto_secretbox_keygen(nonce);
             Message::message<MsgType> nonce_msg;
             nonce_msg.set_id(MsgType::NONCE);
             std::vector<char> nonce_container;
             std::copy(&nonce[0],&nonce[crypto_secretbox_NONCEBYTES],std::back_inserter(nonce_container));
-            nonce_container.push_back('\n');
             nonce_msg << nonce_container;
-            boost::asio::write(socket, boost::asio::buffer(&nonce_msg.header.id, sizeof(nonce_msg.header.id)), ignored_error);
-            boost::asio::write(socket, boost::asio::buffer(nonce_msg.body.data(), nonce_msg.body.size()), ignored_error);
-
+            nonce_msg.sendMessage(socket);
 
             crypto_secretbox_easy(ciphertext, reinterpret_cast<const unsigned char *>(user_password.c_str()), user_password.length(), nonce, key);
             cipher_vect.assign(ciphertext,ciphertext+c_len);
-            cipher_vect.push_back('\n'); //terminatore, importante senno dobbiamo ricopiare un'altra leggi comadno
             mex << cipher_vect;
-            boost::asio::write(socket, boost::asio::buffer(&mex.header.id, sizeof(mex.header.id)), ignored_error);
-            boost::asio::write(socket, boost::asio::buffer(mex.body.data(), mex.body.size()), ignored_error);
+            mex.sendMessage(socket);
 
             Message::message<MsgType> get_data;
             get_data.set_id(MsgType::GETPATH);
-            std::string get_str("GET ../files/prova\r\n");
+            std::string get_str("../files/prova");
             get_data << get_str;
-            boost::asio::write(socket, boost::asio::buffer(&get_data.header.id, sizeof(get_data.header.id)), ignored_error);
-            boost::asio::write(socket, boost::asio::buffer(get_data.body.data(), get_data.body.size()), ignored_error);
+            get_data.sendMessage(socket);
+
             socket.wait(boost::asio::ip::tcp::socket::wait_read);
 
             Message::message<MsgType> fine;
             fine.set_id(MsgType::LOGOUT);
             //std::string fine_str("FINE\r\n");
             //fine << fine_str;
+            boost::asio::write(socket, boost::asio::buffer(&fine.header.size, sizeof(fine.header.size)), ignored_error);
             boost::asio::write(socket, boost::asio::buffer(&fine.header.id, sizeof(fine.header.id)), ignored_error);
             //boost::asio::write(socket, boost::asio::buffer(fine.body.data(), fine.body.size()), ignored_error);
             //cose commentate superflue, basta header
@@ -170,4 +162,10 @@ void getSomeData(boost::asio::ip::tcp::socket& socket)
     //ho ricevuto tutto -> spacchetto logicamente
 
     //todo
+}
+
+
+void login(std::string& user,std::string& password,boost::asio::ip::tcp::socket& socket)
+{
+
 }
