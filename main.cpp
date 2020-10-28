@@ -1,23 +1,8 @@
 #include <iostream>
-#include <chrono>
-#include <cppconn/driver.h>
-#include <cppconn/exception.h>
-#include <cppconn/resultset.h>
-#include <cppconn/statement.h>
-#include <boost/asio/ts/buffer.hpp>
-#include <boost/asio/ts/internet.hpp>
-#include <boost/array.hpp>
 #include <thread>
-#include <sodium.h>
-#include <sodium/crypto_pwhash.h>
-#include <sodium/crypto_auth.h>
-#include <sodium/crypto_secretbox.h>
-#include <sodium/randombytes.h>
+#include "Security.h"
 #include "Message.h"
-using namespace  std::chrono_literals;
-std::vector<char> vBuffer(1*1024); //big buffer , regulate the speed and costs
-unsigned char key[crypto_secretbox_KEYBYTES] ={"pds_project_key"};
-unsigned char nonce[crypto_secretbox_NONCEBYTES]={};
+
 void getSomeData(boost::asio::ip::tcp::socket& socket);
 
 boost::system::error_code ec;
@@ -54,72 +39,19 @@ int main(int argc, char** argv) {
         if(socket.is_open())
         {
 
-            std::cout <<"Register: " << std::endl;
-            boost::system::error_code ignored_error;
-            std::vector<unsigned char> cipher_vect_r;
-            Message::message<MsgType> mex_r;
-            mex_r.set_id(MsgType::REGISTER);
             std::string usr("andrea");
             std::string psw("pdsproject");
-            std::string usr_psw = usr+" "+psw;
-            size_t c_len_r =crypto_secretbox_MACBYTES + usr_psw.length();
-            unsigned char ciphertext_r[c_len_r];
+            //possiamo chiedere di passarli tramite linea di comando..cin
 
-            crypto_secretbox_keygen(nonce);
-
-            Message::message<MsgType> nonce_msg_r;
-            nonce_msg_r.set_id(MsgType::NONCE);
-            std::vector<char> nonce_container_r;
-            std::copy(&nonce[0],&nonce[crypto_secretbox_NONCEBYTES],std::back_inserter(nonce_container_r));
-            nonce_msg_r << nonce_container_r;
-            nonce_msg_r.sendMessage(socket);
-
-            crypto_secretbox_easy(ciphertext_r, reinterpret_cast<const unsigned char *>(usr_psw.c_str()), usr_psw.length(), nonce, key);
-            cipher_vect_r.assign(ciphertext_r,ciphertext_r+c_len_r);
-            mex_r << cipher_vect_r;
-            mex_r.sendMessage(socket);
-
-
-            std::cout <<"Login requested: " << std::endl;
-            std::vector<unsigned char> cipher_vect;
-            Message::message<MsgType> mex;
-            mex.set_id(MsgType::LOGIN);
-            std::string user(argv[3]);
-            std::string password(argv[4]);
-            std::string user_password = user+" "+password;
-            size_t c_len =crypto_secretbox_MACBYTES + user_password.length();
-            unsigned char ciphertext[c_len];
-            //crypto_secretbox_keygen(key);
-
-            crypto_secretbox_keygen(nonce);
-            Message::message<MsgType> nonce_msg;
-            nonce_msg.set_id(MsgType::NONCE);
-            std::vector<char> nonce_container;
-            std::copy(&nonce[0],&nonce[crypto_secretbox_NONCEBYTES],std::back_inserter(nonce_container));
-            nonce_msg << nonce_container;
-            nonce_msg.sendMessage(socket);
-
-            crypto_secretbox_easy(ciphertext, reinterpret_cast<const unsigned char *>(user_password.c_str()), user_password.length(), nonce, key);
-            cipher_vect.assign(ciphertext,ciphertext+c_len);
-            mex << cipher_vect;
-            mex.sendMessage(socket);
-
-            Message::message<MsgType> get_data;
-            get_data.set_id(MsgType::GETPATH);
-            std::string get_str("../files/prova");
-            get_data << get_str;
-            get_data.sendMessage(socket);
+            Security security(usr,psw,socket);
+            security.register_user();
+            security.login();
+            std::string path = "../files/prova";
+            security.getData(path);
 
             socket.wait(boost::asio::ip::tcp::socket::wait_read);
 
-            Message::message<MsgType> fine;
-            fine.set_id(MsgType::LOGOUT);
-            //std::string fine_str("FINE\r\n");
-            //fine << fine_str;
-            boost::asio::write(socket, boost::asio::buffer(&fine.header.size, sizeof(fine.header.size)), ignored_error);
-            boost::asio::write(socket, boost::asio::buffer(&fine.header.id, sizeof(fine.header.id)), ignored_error);
-            //boost::asio::write(socket, boost::asio::buffer(fine.body.data(), fine.body.size()), ignored_error);
-            //cose commentate superflue, basta header
+            security.logout();
 
             getSomeData(socket);
         }
@@ -162,10 +94,4 @@ void getSomeData(boost::asio::ip::tcp::socket& socket)
     //ho ricevuto tutto -> spacchetto logicamente
 
     //todo
-}
-
-
-void login(std::string& user,std::string& password,boost::asio::ip::tcp::socket& socket)
-{
-
 }

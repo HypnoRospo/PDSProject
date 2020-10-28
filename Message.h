@@ -16,7 +16,9 @@
 #include <chrono>
 #include <cstdint>
 #include <cstring>
-
+#include <boost/asio/ts/buffer.hpp>
+#include <boost/asio/ts/internet.hpp>
+#include <boost/array.hpp>
 
 enum class MsgType : uint32_t
 {
@@ -107,10 +109,11 @@ struct message
      boost::system::error_code sendMessage(boost::asio::ip::tcp::socket& socket)
     {
         boost::system::error_code errorCode;
+
         boost::asio::write(socket, boost::asio::buffer(&(this->header.size), sizeof(this->header.size)), errorCode);
         if(!errorCode.failed())
         boost::asio::write(socket, boost::asio::buffer(&(this->header.id), sizeof(this->header.id)), errorCode);
-        if(!errorCode.failed())
+        if(!errorCode.failed() && (this->header.id != MsgType::LOGOUT))
             boost::asio::write(socket, boost::asio::buffer(this->body.data(), this->body.size()), errorCode);
         return errorCode;
     }

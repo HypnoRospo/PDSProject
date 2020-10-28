@@ -7,21 +7,31 @@
 
 #include <string>
 #include <boost/asio/ip/tcp.hpp>
-
+#include "Message.h"
 class Security {
+public:
+    Security(std::string &usr, std::string &psw, boost::asio::ip::tcp::socket &socket);
 
 private:
-
     std::string& usr;
+    std::string& psw;
+    boost::asio::ip::tcp::socket& socket;
+    void setNonce() const;
+    void same_procedure(MsgType msgType) const;
 
-
-protected:
-
-
+//protected:
 
 public:
-     void login(std::string& user,std::string& password,boost::asio::ip::tcp::socket& socket);
-     void register_user(std::string& user,std::string& password,boost::asio::ip::tcp::socket& socket);
+     void login() const;
+     void register_user() const;
+     void getData(std::string& path) const;
+     void logout() const;
+
+    virtual ~Security();
+
+    [[nodiscard]] std::string &getUsr() const;
+    [[nodiscard]] std::string &getPsw() const;
+    [[nodiscard]] boost::asio::ip::tcp::socket &getSocket() const;
 };
 
 
