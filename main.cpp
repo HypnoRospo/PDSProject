@@ -1,11 +1,13 @@
 #include <iostream>
 #include <thread>
 #include "Security.h"
-#include "Message.h"
-
-void getSomeData(boost::asio::ip::tcp::socket& socket);
-
+#define OK_REGISTER "-SERVER: REGISTRAZIONE AVVENUTA CON SUCCESSO\r\n"
+void getSomeData(Security& security);
+void getSomeData_asyn(boost::asio::ip::tcp::socket& socket);
+using namespace  std::chrono_literals;
+std::vector<char> vBuffer(1*1024); //big buffer , regulate the speed and costs
 boost::system::error_code ec;
+void menu();
 
 int main(int argc, char** argv) {
 
@@ -19,14 +21,17 @@ int main(int argc, char** argv) {
     }
 
     try {
-
-        boost::asio::io_context io_context;
         //boost::asio::ip::tcp::resolver resolver(io_context); ci servira' probabilmente
 
+        boost::asio::io_context io_context;//create a context essentially the platform specific interface
+        /*
+        boost::asio::io_context::work idleWork(io_context); //fake tasks to asio
+        std::thread thrContext = std::thread([&] () {io_context.run();}); //start context in background
+
+         */
         boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::make_address(argv[1],ec),atoi(argv[2]));
         boost::asio::ip::tcp::socket  socket(io_context); //the context will deliver the implementation
         socket.connect(endpoint,ec);
-
         if(!ec)
         {
             std::cout <<"Connected to the Server" << std::endl;
@@ -38,22 +43,49 @@ int main(int argc, char** argv) {
 
         if(socket.is_open())
         {
-
-            std::string usr("andrea");
-            std::string psw("pdsproject");
-            //possiamo chiedere di passarli tramite linea di comando..cin
-
+            unsigned int scelta;
+            std::string usr(argv[3]);
+            std::string psw(argv[4]);
             Security security(usr,psw,socket);
-            security.register_user();
-            security.login();
-            std::string path = "../files/prova";
-            security.getData(path);
 
-            socket.wait(boost::asio::ip::tcp::socket::wait_read);
+            menu();
+            while(true)
+            {
+                std::cout<<"Inserire scelta: ";
+                std::cin>> scelta;
+                switch(scelta)
+                {
+                    case 1:
+                        security.register_user();
+                        break;
+                    case 2:
+                        security.login();
+                        break;
+                    case 3:
+                    {
+                        std::string path_str;
+                        std::cout<<"Inseire path per favore: ";
+                        std::cin>> path_str;
+                        security.getData(path_str);
+                        break;
+                    }
+                    case 4:
+                    {
+                        security.logout();
+                        menu();
+                        break;
+                    }
 
-            security.logout();
+                    case 5:
+                        exit(EXIT_SUCCESS);
 
-            getSomeData(socket);
+                    default:
+                        std::cout<<"Errore scelta, si prega di riprovare"<<std::endl;
+                        break;
+                }
+                getSomeData(security);
+            }
+
         }
     }
     catch (std::exception& e)
@@ -74,24 +106,80 @@ void Send(const Message::message<MsgType>& msg)
 }
  */
 
-void getSomeData(boost::asio::ip::tcp::socket& socket)
+void getSomeData(Security& security)
 {
 
     for (;;)
     {
-        boost::array<char, 128> buffer;
+        std::vector<char> buffer(128);
         boost::system::error_code error;
 
-        size_t len = socket.read_some(boost::asio::buffer(buffer), error);
+        size_t len = security.getSocket().read_some(boost::asio::buffer(buffer), error);
         if (error == boost::asio::error::eof)
             break; // Connection closed cleanly by peer.
         else if (error)
             throw boost::system::system_error(error); // Some other error.
 
+        if ( std::find(buffer.begin(), buffer.begin()+len, '\a') != buffer.begin()+len )
+        {
+            std::cout << "Utente gia' presente nel sistema, inserire un diverso username" <<std::endl;
+            security.same_procedure(MsgType::REGISTER,true);
+            break;
+        }
+        else if( std::find(buffer.begin(), buffer.begin()+len, '\b') != buffer.begin()+len)
+        {
+                std::cout << "Login fallito, username o password sbagliate, riprovare" <<std::endl;
+                security.same_procedure(MsgType::LOGIN,true);
+                break;
+        }
+      else
         std::cout.write(buffer.data(), len);
+
     }
 
     //ho ricevuto tutto -> spacchetto logicamente
 
     //todo
+}
+
+/*
+void getSomeData_asyn(boost::asio::ip::tcp::socket& socket)
+{
+
+    socket.async_read_some(boost::asio::buffer(vBuffer.data(),vBuffer.size()),
+                           [&](std::error_code ec,std::size_t length)
+                           {
+                               if(!ec)
+                               {
+                                   std::cout <<"\n\n Read " <<length << " bytes\n\n";
+                                   for( int i=0; i<length; i++)
+                                   {
+                                       std::cout << vBuffer[i];
+                                   }
+                                   //logica applicativa
+
+                                   getSomeData_asyn(socket); // isn't a real recursive but a system watching of network data.
+                               }
+                           }
+    );
+}
+ */
+
+void menu()
+{
+    std::cout<<"###########################################"<<std::endl;
+    std::cout<<"############CLIENT PROGRAM#################"<<std::endl;
+    std::cout<<"###########################################"<<std::endl;
+
+    std::cout<<"Per registrarsi premere [1]"<<std::endl;
+    std::cout<<"Per loggarsi premere [2]"<<std::endl;
+    std::cout<<"Per richiedere un file premere [3]"<<std::endl;
+    std::cout<<"Per fare il logout [4]"<<std::endl;
+    std::cout<<"Per registrarsi premere [5]"<<std::endl;
+    std::cout<<"Per registrarsi premere [6]"<<std::endl;
+
+    std::cout<<"###########################################"<<std::endl;
+    std::cout<<"#################MENU######################"<<std::endl;
+    std::cout<<"###########################################"<<std::endl;
+
 }

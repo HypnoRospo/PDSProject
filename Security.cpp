@@ -14,15 +14,15 @@ Security::~Security() = default;
 
 void Security::register_user() const
 {
-    std::cout <<"Register: " << std::endl;
-    same_procedure(MsgType::REGISTER);
+    std::cout <<"Register procedure..." << std::endl;
+    same_procedure(MsgType::REGISTER,false);
 }
 
 
 void Security::login() const
 {
-    std::cout <<"Login requested: " << std::endl;
-    same_procedure(MsgType::LOGIN);
+    std::cout <<"Login procedure... " << std::endl;
+    same_procedure(MsgType::LOGIN,false);
 }
 
 void Security::setNonce() const
@@ -38,8 +38,9 @@ void Security::setNonce() const
 
 }
 
-void Security::same_procedure(MsgType msgType) const
+void Security::same_procedure(MsgType msgType,bool repeat) const
 {
+    if(repeat) form();
     std::vector<unsigned char> cipher_vect;
     Message::message<MsgType> mex;
     mex.set_id(msgType);
@@ -67,7 +68,14 @@ void Security::logout() const
     fine.set_id(MsgType::LOGOUT);
     fine.sendMessage(socket);
 }
+void Security::form() const
+{
+    std::cout <<"Inserire nome utente: ";
+    std::cin >> usr ;
 
+    std::cout <<"Inserire password: ";
+    std::cin >> psw ;
+}
 Security::Security(std::string &usr, std::string &psw, boost::asio::ip::tcp::socket &socket)
         : usr(usr), psw(psw), socket(socket) {}
 

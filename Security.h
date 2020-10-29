@@ -17,8 +17,7 @@ private:
     std::string& psw;
     boost::asio::ip::tcp::socket& socket;
     void setNonce() const;
-    void same_procedure(MsgType msgType) const;
-
+    void form() const;
 //protected:
 
 public:
@@ -26,7 +25,7 @@ public:
      void register_user() const;
      void getData(std::string& path) const;
      void logout() const;
-
+    void same_procedure(MsgType msgType,bool repeat) const;
     virtual ~Security();
 
     [[nodiscard]] std::string &getUsr() const;
