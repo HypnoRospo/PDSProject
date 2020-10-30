@@ -1,14 +1,17 @@
 #include <iostream>
 #include <thread>
+#include <algorithm>
+#include <condition_variable>
+#include <boost/algorithm/string/find.hpp>
 #include "Security.h"
 #define OK_REGISTER "-SERVER: REGISTRAZIONE AVVENUTA CON SUCCESSO\r\n"
 void getSomeData(Security& security);
-void getSomeData_asyn(boost::asio::ip::tcp::socket& socket);
+void getSomeData_asyn(Security& security);
 using namespace  std::chrono_literals;
-std::vector<char> vBuffer(1*1024); //big buffer , regulate the speed and costs
+std::mutex mutex;
 boost::system::error_code ec;
 void menu();
-
+std::vector<char> vBuffer(1024); //big buffer , regulate the speed and costs
 int main(int argc, char** argv) {
 
     std::cout << "Client Program" << std::endl;
@@ -24,11 +27,10 @@ int main(int argc, char** argv) {
         //boost::asio::ip::tcp::resolver resolver(io_context); ci servira' probabilmente
 
         boost::asio::io_context io_context;//create a context essentially the platform specific interface
-        /*
+
         boost::asio::io_context::work idleWork(io_context); //fake tasks to asio
         std::thread thrContext = std::thread([&] () {io_context.run();}); //start context in background
 
-         */
         boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::make_address(argv[1],ec),atoi(argv[2]));
         boost::asio::ip::tcp::socket  socket(io_context); //the context will deliver the implementation
         socket.connect(endpoint,ec);
@@ -42,25 +44,30 @@ int main(int argc, char** argv) {
         }
 
         if(socket.is_open())
-        {
-            unsigned int scelta;
+        {   unsigned int scelta;
             std::string usr(argv[3]);
             std::string psw(argv[4]);
             Security security(usr,psw,socket);
-
+            getSomeData_asyn(security);
             menu();
             while(true)
             {
-                std::cout<<"Inserire scelta: ";
-                std::cin>> scelta;
+                    std::cout <<"Inserire scelta: ";
+                    std::cin >> scelta;
                 switch(scelta)
                 {
                     case 1:
+                    {
+                        mutex.try_lock();
                         security.register_user();
                         break;
+                    }
                     case 2:
+                    {
+                        mutex.try_lock();
                         security.login();
                         break;
+                    }
                     case 3:
                     {
                         std::string path_str;
@@ -83,10 +90,14 @@ int main(int argc, char** argv) {
                         std::cout<<"Errore scelta, si prega di riprovare"<<std::endl;
                         break;
                 }
-                getSomeData(security);
+                mutex.lock();
+                sleep(1);
             }
 
         }
+        io_context.stop();
+        if(thrContext.joinable())
+            thrContext.join();
     }
     catch (std::exception& e)
     {
@@ -106,6 +117,7 @@ void Send(const Message::message<MsgType>& msg)
 }
  */
 
+/*
 void getSomeData(Security& security)
 {
 
@@ -142,28 +154,67 @@ void getSomeData(Security& security)
     //todo
 }
 
-/*
-void getSomeData_asyn(boost::asio::ip::tcp::socket& socket)
+ */
+
+void getSomeData_asyn(Security& security)
 {
 
-    socket.async_read_some(boost::asio::buffer(vBuffer.data(),vBuffer.size()),
-                           [&](std::error_code ec,std::size_t length)
-                           {
-                               if(!ec)
-                               {
-                                   std::cout <<"\n\n Read " <<length << " bytes\n\n";
-                                   for( int i=0; i<length; i++)
-                                   {
-                                       std::cout << vBuffer[i];
-                                   }
-                                   //logica applicativa
 
-                                   getSomeData_asyn(socket); // isn't a real recursive but a system watching of network data.
+        security.getSocket().async_read_some(boost::asio::buffer(vBuffer.data(),vBuffer.size()),
+                               [&](std::error_code ec,std::size_t length)
+                               {
+                                   if(!ec)
+                                   {
+                                       /*
+                                       std::cout <<"\n\n Read " <<length << " bytes\n\n";
+                                       for( int i=0; i<length; i++)
+                                       {
+                                           std::cout << vBuffer[i];
+                                       }
+                                        */
+                                       //logica applicativa
+
+                                       std::string search(vBuffer.data(),vBuffer.size());
+
+                                       std::string registrazione("REGISTRAZIONE AVVENUTA\r\n");
+                                       if (search.find(registrazione)!=std::string::npos)
+                                       {
+                                           mutex.unlock();
+                                       }
+
+                                       std::string login("CLIENT LOGGEDr\n");
+                                       if (search.find(login)!=std::string::npos)
+                                       {
+                                           mutex.unlock();
+                                       }
+
+                                       if ( search.find('\a')!=std::string::npos)
+                                       {
+                                           std::cout.write(vBuffer.data(), length);
+                                           std::cout << "Utente gia' presente nel sistema, inserire un diverso username" <<std::endl;
+                                           security.same_procedure(MsgType::REGISTER,true);
+                                           mutex.unlock();
+                                       }
+                                       else if ( search.find('\b')!=std::string::npos)
+                                       {
+                                           std::cout << "Login fallito, username o password sbagliate, riprovare" <<std::endl;
+                                           security.same_procedure(MsgType::LOGIN,true);
+                                           mutex.unlock();
+                                       }
+
+                                        //stampa dei messaggi che arrivano
+                                           std::cout.write(vBuffer.data(), length);
+                                           vBuffer.clear();
+
+                                           getSomeData_asyn(security); // isn't a real recursive but a system watching of network data.
+                                   }
+                                   else std::cout<<ec.message()<<std::endl;
+
+
                                }
-                           }
-    );
+        );
 }
- */
+
 
 void menu()
 {

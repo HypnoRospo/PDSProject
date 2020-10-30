@@ -9,7 +9,6 @@
 
 unsigned char key[crypto_secretbox_KEYBYTES] ={"pds_project_key"};
 unsigned char nonce[crypto_secretbox_NONCEBYTES]={};
-
 Security::~Security() = default;
 
 void Security::register_user() const
@@ -72,7 +71,6 @@ void Security::form() const
 {
     std::cout <<"Inserire nome utente: ";
     std::cin >> usr ;
-
     std::cout <<"Inserire password: ";
     std::cin >> psw ;
 }
