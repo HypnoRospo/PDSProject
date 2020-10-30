@@ -4,14 +4,11 @@
 #include <condition_variable>
 #include <boost/algorithm/string/find.hpp>
 #include "Security.h"
-#define OK_REGISTER "-SERVER: REGISTRAZIONE AVVENUTA CON SUCCESSO\r\n"
-void getSomeData(Security& security);
-void getSomeData_asyn(Security& security);
-using namespace  std::chrono_literals;
+void getSomeData_asyn(Security& security,std::vector<char>& vBuffer);
 std::mutex mutex;
+std::condition_variable cv;
 boost::system::error_code ec;
 void menu();
-std::vector<char> vBuffer(1024); //big buffer , regulate the speed and costs
 int main(int argc, char** argv) {
 
     std::cout << "Client Program" << std::endl;
@@ -41,30 +38,33 @@ int main(int argc, char** argv) {
         else
         {
             std::cout << "Failed to connect to address:\n" << ec.message() <<std::endl;
+            exit(EXIT_FAILURE);
         }
 
         if(socket.is_open())
         {   unsigned int scelta;
+            std::unique_lock<std::mutex> ul(mutex);
+            std::vector<char> vBuffer(1024); //big buffer , regulate the speed and costs
             std::string usr(argv[3]);
             std::string psw(argv[4]);
             Security security(usr,psw,socket);
-            getSomeData_asyn(security);
-            menu();
+            getSomeData_asyn(security,vBuffer);
             while(true)
             {
+                    menu();
                     std::cout <<"Inserire scelta: ";
                     std::cin >> scelta;
                 switch(scelta)
                 {
                     case 1:
                     {
-                        mutex.try_lock();
+                        //try_lock()
                         security.register_user();
                         break;
                     }
                     case 2:
                     {
-                        mutex.try_lock();
+                        //try_lock()
                         security.login();
                         break;
                     }
@@ -79,19 +79,25 @@ int main(int argc, char** argv) {
                     case 4:
                     {
                         security.logout();
-                        menu();
                         break;
                     }
 
                     case 5:
+                    {
                         exit(EXIT_SUCCESS);
+                    }
+
 
                     default:
+                    {
                         std::cout<<"Errore scelta, si prega di riprovare"<<std::endl;
+                        cv.notify_all();
                         break;
+                    }
+
                 }
-                mutex.lock();
-                sleep(1);
+                //lock()
+                cv.wait(ul);
             }
 
         }
@@ -102,6 +108,7 @@ int main(int argc, char** argv) {
     catch (std::exception& e)
     {
         std::cerr << e.what() << std::endl;
+        exit(EXIT_FAILURE);
     }
     return 0;
 }
@@ -156,57 +163,92 @@ void getSomeData(Security& security)
 
  */
 
-void getSomeData_asyn(Security& security)
+void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
 {
-
-
         security.getSocket().async_read_some(boost::asio::buffer(vBuffer.data(),vBuffer.size()),
                                [&](std::error_code ec,std::size_t length)
                                {
                                    if(!ec)
                                    {
-                                       /*
                                        std::cout <<"\n\n Read " <<length << " bytes\n\n";
                                        for( int i=0; i<length; i++)
                                        {
+                                           if(vBuffer[i]!='\a' && vBuffer[i]!='\b')
                                            std::cout << vBuffer[i];
                                        }
-                                        */
+                                       std::cout<<std::endl;
+
+
                                        //logica applicativa
 
-                                       std::string search(vBuffer.data(),vBuffer.size());
+
+                                       std::string search(vBuffer.begin(),vBuffer.begin()+length);
+
+                                       /*
+                                       std::cout<<"STAMPA DI SEARCH-> "<<std::endl;
+                                       std::cout<<":::"<<search<<std::endl;
+                                       std::cout<<"STAMPA DI BUFFER-> "<<std::endl;
+                                       std::cout<<":::"<<vBuffer.data()<<std::endl;
+
+                                        */
+
+
+                                       //std::cout.write(search.c_str(), search.length());
+
+                                       if ( search.find('\a')!=std::string::npos)
+                                       {
+                                           std::cout << "Utente gia' presente nel sistema, inserire un diverso username" <<std::endl;
+                                           security.same_procedure(MsgType::REGISTER,true);
+                                       }
+
+                                        if ( search.find('\b')!=std::string::npos)
+                                       {
+                                           std::cout << "Login fallito, username o password sbagliate, riprovare" <<std::endl;
+                                           security.same_procedure(MsgType::LOGIN,true);
+                                       }
 
                                        std::string registrazione("REGISTRAZIONE AVVENUTA\r\n");
                                        if (search.find(registrazione)!=std::string::npos)
                                        {
-                                           mutex.unlock();
+                                           //mutex.unlock()
+                                           cv.notify_all();
                                        }
 
-                                       std::string login("CLIENT LOGGEDr\n");
+                                       std::string login("CLIENT LOGGED\r\n");
                                        if (search.find(login)!=std::string::npos)
                                        {
-                                           mutex.unlock();
+                                           //mutex.unlock()
+                                           cv.notify_all();
                                        }
 
-                                       if ( search.find('\a')!=std::string::npos)
+
+                                       std::string logout("CLIENT LOGOUT\r\n");
+                                       if (search.find(logout)!=std::string::npos)
                                        {
-                                           std::cout.write(vBuffer.data(), length);
-                                           std::cout << "Utente gia' presente nel sistema, inserire un diverso username" <<std::endl;
-                                           security.same_procedure(MsgType::REGISTER,true);
-                                           mutex.unlock();
+                                           //mutex.unlock()
+                                           cv.notify_all();
                                        }
-                                       else if ( search.find('\b')!=std::string::npos)
+
+                                       std::string logout_err("LOGOUT FALLITO\r\n");
+                                       if (search.find(logout_err)!=std::string::npos)
                                        {
-                                           std::cout << "Login fallito, username o password sbagliate, riprovare" <<std::endl;
-                                           security.same_procedure(MsgType::LOGIN,true);
-                                           mutex.unlock();
+                                           //mutex.unlock()
+                                           cv.notify_all();
                                        }
+
+
+                                       std::string file_str("FILE MANDATO CON SUCCESSO\r\n");
+                                       if (search.find(file_str)!=std::string::npos)
+                                       {
+                                           //mutex.unlock()
+                                           cv.notify_all();
+                                       }
+
+
 
                                         //stampa dei messaggi che arrivano
-                                           std::cout.write(vBuffer.data(), length);
-                                           vBuffer.clear();
 
-                                           getSomeData_asyn(security); // isn't a real recursive but a system watching of network data.
+                                           getSomeData_asyn(security,vBuffer); // isn't a real recursive but a system watching of network data.
                                    }
                                    else std::cout<<ec.message()<<std::endl;
 
@@ -226,8 +268,7 @@ void menu()
     std::cout<<"Per loggarsi premere [2]"<<std::endl;
     std::cout<<"Per richiedere un file premere [3]"<<std::endl;
     std::cout<<"Per fare il logout [4]"<<std::endl;
-    std::cout<<"Per registrarsi premere [5]"<<std::endl;
-    std::cout<<"Per registrarsi premere [6]"<<std::endl;
+    std::cout<<"Per uscire dal programma premere [5]"<<std::endl;
 
     std::cout<<"###########################################"<<std::endl;
     std::cout<<"#################MENU######################"<<std::endl;
