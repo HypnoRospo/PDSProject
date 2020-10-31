@@ -6,6 +6,7 @@
 #include <set>
 #include "Security.h"
 void getSomeData_asyn(Security& security,std::vector<char>& vBuffer);
+void start_new_connection(boost::asio::ip::tcp::socket& socket, boost::asio::ip::tcp::endpoint& endpoint);
 std::mutex mutex;
 std::condition_variable cv;
 std::set<std::string> set_errors;
@@ -33,17 +34,8 @@ int main(int argc, char** argv) {
 
         boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::make_address(argv[1],ec),atoi(argv[2]));
         boost::asio::ip::tcp::socket  socket(io_context); //the context will deliver the implementation
-        socket.connect(endpoint,ec);
-        if(!ec)
-        {
-            std::cout <<"Connected to the Server" << std::endl;
-            fill_set_errors();
-        }
-        else
-        {
-            std::cout << "Failed to connect to address:\n" << ec.message() <<std::endl;
-            exit(EXIT_FAILURE);
-        }
+        start_new_connection(socket,endpoint);
+        fill_set_errors();
 
         if(socket.is_open())
         {   unsigned int scelta;
@@ -81,6 +73,7 @@ int main(int argc, char** argv) {
                     case 4:
                     {
                         security.logout();
+                        exit(EXIT_SUCCESS);
                         break;
                     }
 
@@ -291,4 +284,19 @@ void fill_set_errors()
     set_errors.insert("LOGOUT FALLITO\r\n");
     set_errors.insert("FILE MANDATO CON SUCCESSO\r\n");
     set_errors.insert("ERRORE, file non trovato o errore generico\r\n");
+}
+
+
+void start_new_connection(boost::asio::ip::tcp::socket& socket, boost::asio::ip::tcp::endpoint& endpoint)
+{
+    socket.connect(endpoint,ec);
+    if(!ec)
+    {
+        std::cout <<"Connected to the Server" << std::endl;
+    }
+    else
+    {
+        std::cout << "Failed to connect to address:\n" << ec.message() <<std::endl;
+        exit(EXIT_FAILURE);
+    }
 }
