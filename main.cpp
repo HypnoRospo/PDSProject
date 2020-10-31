@@ -38,7 +38,8 @@ int main(int argc, char** argv) {
         fill_set_errors();
 
         if(socket.is_open())
-        {   unsigned int scelta;
+        {
+            unsigned int scelta;
             std::unique_lock<std::mutex> ul(mutex);
             std::vector<char> vBuffer(1024); //big buffer , regulate the speed and costs
             std::string usr(argv[3]);
@@ -74,7 +75,6 @@ int main(int argc, char** argv) {
                     {
                         security.logout();
                         cv.wait(ul);
-                        start_new_connection(socket,endpoint); //tofix but okay
                         continue;
                     }
 
@@ -108,56 +108,6 @@ int main(int argc, char** argv) {
     }
     return 0;
 }
-
-/*
-void Send(const Message::message<MsgType>& msg)
-{
-    boost::asio::post(context,
-               [msg]()
-               {
-
-               });
-}
- */
-
-/*
-void getSomeData(Security& security)
-{
-
-    for (;;)
-    {
-        std::vector<char> buffer(128);
-        boost::system::error_code error;
-
-        size_t len = security.getSocket().read_some(boost::asio::buffer(buffer), error);
-        if (error == boost::asio::error::eof)
-            break; // Connection closed cleanly by peer.
-        else if (error)
-            throw boost::system::system_error(error); // Some other error.
-
-        if ( std::find(buffer.begin(), buffer.begin()+len, '\a') != buffer.begin()+len )
-        {
-            std::cout << "Utente gia' presente nel sistema, inserire un diverso username" <<std::endl;
-            security.same_procedure(MsgType::REGISTER,true);
-            break;
-        }
-        else if( std::find(buffer.begin(), buffer.begin()+len, '\b') != buffer.begin()+len)
-        {
-                std::cout << "Login fallito, username o password sbagliate, riprovare" <<std::endl;
-                security.same_procedure(MsgType::LOGIN,true);
-                break;
-        }
-      else
-        std::cout.write(buffer.data(), len);
-
-    }
-
-    //ho ricevuto tutto -> spacchetto logicamente
-
-    //todo
-}
-
- */
 
 void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
 {
@@ -275,6 +225,7 @@ void menu()
 
 }
 
+//todo
 void fill_set_errors()
 {
     set_errors.insert("\a");
@@ -290,14 +241,14 @@ void fill_set_errors()
 
 void start_new_connection(boost::asio::ip::tcp::socket& socket, boost::asio::ip::tcp::endpoint& endpoint)
 {
-    socket.connect(endpoint,ec);
-    if(!ec)
-    {
-        std::cout <<"Connected to the Server" << std::endl;
-    }
-    else
-    {
-        std::cout << "Failed to connect to address:\n" << ec.message() <<std::endl;
-        exit(EXIT_FAILURE);
-    }
+        socket.connect(endpoint,ec);
+        if(!ec)
+        {
+            std::cout <<"Connected to the Server" << std::endl;
+        }
+        else
+        {
+            std::cout << "Failed to connect to address:\n" << ec.message() <<std::endl;
+            exit(EXIT_FAILURE);
+        }
 }

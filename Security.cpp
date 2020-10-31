@@ -68,8 +68,6 @@ void Security::logout() const
     Message::message<MsgType> fine;
     fine.set_id(MsgType::LOGOUT);
     fine.sendMessage(socket);
-    usr= "";
-    psw= "";
 }
 void Security::form() const
 {
