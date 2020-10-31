@@ -74,7 +74,6 @@ int main(int argc, char** argv) {
                     {
                         security.logout();
                         exit(EXIT_SUCCESS);
-                        break;
                     }
 
                     case 5:
