@@ -3,12 +3,15 @@
 #include <algorithm>
 #include <condition_variable>
 #include <boost/algorithm/string/find.hpp>
+#include <set>
 #include "Security.h"
 void getSomeData_asyn(Security& security,std::vector<char>& vBuffer);
 std::mutex mutex;
 std::condition_variable cv;
+std::set<std::string> set_errors;
 boost::system::error_code ec;
 void menu();
+void fill_set_errors();
 int main(int argc, char** argv) {
 
     std::cout << "Client Program" << std::endl;
@@ -34,6 +37,7 @@ int main(int argc, char** argv) {
         if(!ec)
         {
             std::cout <<"Connected to the Server" << std::endl;
+            fill_set_errors();
         }
         else
         {
@@ -70,10 +74,8 @@ int main(int argc, char** argv) {
                     }
                     case 3:
                     {
-                        std::string path_str;
-                        std::cout<<"Inseire path per favore: ";
-                        std::cin>> path_str;
-                        security.getData(path_str);
+                        //try_lock()
+                        security.getData();
                         break;
                     }
                     case 4:
@@ -191,8 +193,6 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
                                        std::cout<<":::"<<vBuffer.data()<<std::endl;
 
                                         */
-
-
                                        //std::cout.write(search.c_str(), search.length());
 
                                        if ( search.find('\a')!=std::string::npos)
@@ -245,7 +245,12 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
                                        }
 
 
-
+                                       std::string file_str_err("ERRORE, file non trovato o errore generico\r\n");
+                                       if (search.find(file_str_err)!=std::string::npos)
+                                       {
+                                           //mutex.unlock()
+                                           cv.notify_all();
+                                       }
                                         //stampa dei messaggi che arrivano
 
                                            getSomeData_asyn(security,vBuffer); // isn't a real recursive but a system watching of network data.
@@ -274,4 +279,16 @@ void menu()
     std::cout<<"#################MENU######################"<<std::endl;
     std::cout<<"###########################################"<<std::endl;
 
+}
+
+void fill_set_errors()
+{
+    set_errors.insert("\a");
+    set_errors.insert("\b");
+    set_errors.insert("REGISTRAZIONE AVVENUTA\r\n");
+    set_errors.insert("CLIENT LOGGED\r\n");
+    set_errors.insert("CLIENT LOGOUT\r\n");
+    set_errors.insert("LOGOUT FALLITO\r\n");
+    set_errors.insert("FILE MANDATO CON SUCCESSO\r\n");
+    set_errors.insert("ERRORE, file non trovato o errore generico\r\n");
 }

@@ -4,7 +4,6 @@
 
 #include "Security.h"
 #include "Message.h"
-#include <sodium.h>
 #include <sodium/crypto_secretbox.h>
 
 unsigned char key[crypto_secretbox_KEYBYTES] ={"pds_project_key"};
@@ -53,11 +52,14 @@ void Security::same_procedure(MsgType msgType,bool repeat) const
     mex.sendMessage(socket);
 }
 
-void Security::getData(std::string& path) const
+void Security::getData() const
 {
+    std::string path_str;
+    std::cout <<"Inseire path per favore: ";
+    std::cin >> path_str;
     Message::message<MsgType> get_data;
     get_data.set_id(MsgType::GETPATH);
-    get_data << path;
+    get_data << path_str;
     get_data.sendMessage(socket);
 }
 

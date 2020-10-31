@@ -23,7 +23,7 @@ private:
 public:
      void login() const;
      void register_user() const;
-     void getData(std::string& path) const;
+     void getData() const;
      void logout() const;
     void same_procedure(MsgType msgType,bool repeat) const;
     virtual ~Security();
