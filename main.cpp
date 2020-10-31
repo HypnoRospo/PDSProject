@@ -73,7 +73,9 @@ int main(int argc, char** argv) {
                     case 4:
                     {
                         security.logout();
-                        exit(EXIT_SUCCESS);
+                        cv.wait(ul);
+                        start_new_connection(socket,endpoint); //tofix but okay
+                        continue;
                     }
 
                     case 5:
@@ -167,7 +169,7 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
                                        std::cout <<"\n\n Read " <<length << " bytes\n\n";
                                        for( int i=0; i<length; i++)
                                        {
-                                           if(vBuffer[i]!='\a' && vBuffer[i]!='\b')
+                                           if(vBuffer[i]!='\a' && vBuffer[i]!='\b' && vBuffer[i]!=EOF)
                                            std::cout << vBuffer[i];
                                        }
                                        std::cout<<std::endl;
