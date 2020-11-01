@@ -10,7 +10,7 @@
 #include "FileWatcher.h"
 void getSomeData_asyn(Security& security,std::vector<char>& vBuffer);
 void start_new_connection(boost::asio::ip::tcp::socket& socket, boost::asio::ip::tcp::endpoint& endpoint);
-void file_watcher(std::string const & user_path);
+void file_watcher(Security const & security);
 std::mutex mutex;
 std::condition_variable cv;
 std::set<std::string> set_errors;
@@ -42,6 +42,7 @@ int main(int argc, char** argv) {
         if(socket.is_open())
         {
             unsigned int scelta;
+            std::vector<std::thread> thread_vector;
             std::unique_lock<std::mutex> ul(mutex);
             std::vector<char> vBuffer(1024); //big buffer , regulate the speed and costs
             std::string usr;
@@ -54,7 +55,7 @@ int main(int argc, char** argv) {
                 {
                     boost::filesystem::create_directories("../"+security.getUsr());
                     //fase di restore
-                    std::thread fw(file_watcher,security.getUsr());
+                    thread_vector.emplace_back(file_watcher,security);
                 }
                   menu();
                     std::cout <<"Inserire scelta: ";
@@ -93,6 +94,7 @@ int main(int argc, char** argv) {
                     case 4:
                     {
                         security.logout();
+                        thread_vector.front().detach();
                         break;
                     }
 
@@ -126,6 +128,7 @@ int main(int argc, char** argv) {
     }
     return 0;
 }
+
 
 void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
 {
@@ -241,12 +244,12 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
 }
 
 
-void file_watcher(std::string const & user_path)
+void file_watcher(Security const & security)
 {
-    FileWatcher fw{"../"+user_path,std::chrono::milliseconds(3000)};
+    FileWatcher fw{"../"+security.getUsr(),std::chrono::milliseconds(3000)};
     // Start monitoring a folder for changes and (in case of changes)
     // run a user provided lambda function
-    fw.start([](const std::string &path_to_watch,FileStatus status)-> void {
+    fw.start([security](const std::string &path_to_watch,FileStatus status)-> void {
         // Process only regular files, all other file types are ignored
         if(!std::filesystem::is_regular_file(std::filesystem::path(path_to_watch))) //&& status != FileStatus::erased)
             return;
@@ -256,18 +259,28 @@ void file_watcher(std::string const & user_path)
                 std::cout << "File created: " << path_to_watch << '\n';
                 Message::message<MsgType> new_file_msg;
                 new_file_msg.header.id=MsgType::NEW_FILE;
-                new_file_msg << path_to_watch+"/r/n";
-                uint32_t size = boost::filesystem::file_size(path_to_watch);
-                new_file_msg.body.push_back(size);
-                std::ifstream  ifs( path_to_watch, std::ios_base::binary );
-                ifs.open (path_to_watch, std::ifstream::in);
-                char c = ifs.get();
-                while (ifs.good()) {
-                    c = ifs.get();
-                    new_file_msg.body.push_back(c);
-                }
-                ifs.close();
+                std::string path_usr=path_to_watch+"/r/n";
+                std::vector<char> body(path_usr.begin(),path_usr.end());
+                //size_t size = boost::filesystem::file_size(path_to_watch);
+                //body.push_back(size);
 
+                std::ifstream ifs( path_to_watch,std::ios::binary);
+                //ifs.open (path_to_watch, std::ios::binary | std::ios::in);
+                if(ifs){
+                    ifs.seekg(0,std::ifstream::end);
+                    int length = ifs.tellg();
+                    ifs.seekg(0,std::ifstream::beg);
+
+                    std::vector<char> vector_buffer(length);
+                    ifs.read(vector_buffer.data(),length);
+
+                    if(ifs)
+                        body.insert( body.end(), vector_buffer.begin(), vector_buffer.end() );
+                    ifs.close();
+                }
+
+                new_file_msg << body;
+                new_file_msg.sendMessage(security.getSocket());
                 break;
             }
             case FileStatus::modified:
