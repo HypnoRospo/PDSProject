@@ -3,12 +3,14 @@
 #include <algorithm>
 #include <condition_variable>
 #include <boost/algorithm/string/find.hpp>
+#include <boost/filesystem/operations.hpp>
 #include <set>
+#include <fstream>
 #include "Security.h"
 #include "FileWatcher.h"
 void getSomeData_asyn(Security& security,std::vector<char>& vBuffer);
 void start_new_connection(boost::asio::ip::tcp::socket& socket, boost::asio::ip::tcp::endpoint& endpoint);
-void file_watcher();
+void file_watcher(std::string const & user_path);
 std::mutex mutex;
 std::condition_variable cv;
 std::set<std::string> set_errors;
@@ -30,10 +32,8 @@ int main(int argc, char** argv) {
         //boost::asio::ip::tcp::resolver resolver(io_context); ci servira' probabilmente
 
         boost::asio::io_context io_context;//create a context essentially the platform specific interface
-
         boost::asio::io_context::work idleWork(io_context); //fake tasks to asio
         std::thread thrContext = std::thread([&] () {io_context.run();}); //start context in background
-
         boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::make_address(argv[1],ec),std::stoi(argv[2]));
         boost::asio::ip::tcp::socket  socket(io_context); //the context will deliver the implementation
         start_new_connection(socket,endpoint);
@@ -50,7 +50,12 @@ int main(int argc, char** argv) {
             getSomeData_asyn(security,vBuffer);
             while(true)
             {
-
+                if(security.isLogged())
+                {
+                    boost::filesystem::create_directories("../"+security.getUsr());
+                    //fase di restore
+                    std::thread fw(file_watcher,security.getUsr());
+                }
                   menu();
                     std::cout <<"Inserire scelta: ";
                     std::cin >> scelta;
@@ -94,12 +99,6 @@ int main(int argc, char** argv) {
                     case 5:
                     {
                         exit(EXIT_SUCCESS);
-                    }
-
-                    case 6:
-                    {
-                        file_watcher();
-                        break;
                     }
 
 
@@ -217,7 +216,6 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
                                        }
 
 
-
                                        std::string timeout("TIMEOUT SESSION EXPIRED\r\n");
                                        if (search.find(timeout)!=std::string::npos)
                                        {
@@ -243,9 +241,9 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
 }
 
 
-void file_watcher()
+void file_watcher(std::string const & user_path)
 {
-    FileWatcher fw{"../client_files",std::chrono::milliseconds(500)};
+    FileWatcher fw{"../"+user_path,std::chrono::milliseconds(3000)};
     // Start monitoring a folder for changes and (in case of changes)
     // run a user provided lambda function
     fw.start([](const std::string &path_to_watch,FileStatus status)-> void {
@@ -254,8 +252,24 @@ void file_watcher()
             return;
         switch(status) {
             case FileStatus::created:
+            {
                 std::cout << "File created: " << path_to_watch << '\n';
+                Message::message<MsgType> new_file_msg;
+                new_file_msg.header.id=MsgType::NEW_FILE;
+                new_file_msg << path_to_watch+"/r/n";
+                uint32_t size = boost::filesystem::file_size(path_to_watch);
+                new_file_msg.body.push_back(size);
+                std::ifstream  ifs( path_to_watch, std::ios_base::binary );
+                ifs.open (path_to_watch, std::ifstream::in);
+                char c = ifs.get();
+                while (ifs.good()) {
+                    c = ifs.get();
+                    new_file_msg.body.push_back(c);
+                }
+                ifs.close();
+
                 break;
+            }
             case FileStatus::modified:
                 std::cout << "File modified: " << path_to_watch << '\n';
                 break;
