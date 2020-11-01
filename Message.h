@@ -22,7 +22,7 @@
 
 enum class MsgType : uint32_t
 {
-    NONCE,GETPATH,LOGIN,LOGOUT,REGISTER,CRC,ERROR, TRY_AGAIN_REGISTER,TRY_AGAIN_LOGIN
+    NONCE,GETPATH,LOGIN,LOGOUT,REGISTER,CRC,ERROR,TRY_AGAIN_REGISTER,TRY_AGAIN_LOGIN
 };
 
 
@@ -106,13 +106,44 @@ struct message
         this->header.id=type;
     }
 
+
+     uint32_t get_id_uint32(MsgType type)
+    {
+        switch(type)
+        {
+            case (MsgType::NONCE):
+                return 0;
+            case (MsgType::GETPATH):
+                return 1;
+            case (MsgType::LOGIN):
+                return 2;
+            case (MsgType::LOGOUT):
+                return 3;
+            case (MsgType::REGISTER):
+                return 4;
+            case (MsgType::CRC):
+                return 5;
+            case (MsgType::ERROR):
+                return 6;
+            case (MsgType::TRY_AGAIN_REGISTER):
+                return 7;
+            case (MsgType::TRY_AGAIN_LOGIN):
+                return 8;
+
+            default:
+                return 6;//-1
+        }
+    }
+
      boost::system::error_code sendMessage(boost::asio::ip::tcp::socket& socket)
     {
         boost::system::error_code errorCode;
+        uint32_t size_net=htonl(this->header.size);
+        uint32_t header_net=htonl(get_id_uint32(this->header.id));
 
-        boost::asio::write(socket, boost::asio::buffer(&(this->header.size), sizeof(this->header.size)), errorCode);
+        boost::asio::write(socket, boost::asio::buffer(&(size_net), sizeof(size_net)), errorCode);
         if(!errorCode.failed())
-        boost::asio::write(socket, boost::asio::buffer(&(this->header.id), sizeof(this->header.id)), errorCode);
+        boost::asio::write(socket, boost::asio::buffer(&(header_net), sizeof(header_net)), errorCode);
         if(!errorCode.failed() && (this->header.id != MsgType::LOGOUT))
             boost::asio::write(socket, boost::asio::buffer(this->body.data(), this->body.size()), errorCode);
         return errorCode;

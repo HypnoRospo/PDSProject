@@ -5,8 +5,10 @@
 #include <boost/algorithm/string/find.hpp>
 #include <set>
 #include "Security.h"
+#include "FileWatcher.h"
 void getSomeData_asyn(Security& security,std::vector<char>& vBuffer);
 void start_new_connection(boost::asio::ip::tcp::socket& socket, boost::asio::ip::tcp::endpoint& endpoint);
+void file_watcher();
 std::mutex mutex;
 std::condition_variable cv;
 std::set<std::string> set_errors;
@@ -18,7 +20,7 @@ int main(int argc, char** argv) {
     std::cout << "Client Program" << std::endl;
     /*network programming trying */
 
-    if( argc!=5 )
+    if( argc!=3 )
     {
         std::cout<<"Errore numero parametri linea di comando"<<std::endl;
         exit(EXIT_FAILURE);
@@ -32,7 +34,7 @@ int main(int argc, char** argv) {
         boost::asio::io_context::work idleWork(io_context); //fake tasks to asio
         std::thread thrContext = std::thread([&] () {io_context.run();}); //start context in background
 
-        boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::make_address(argv[1],ec),atoi(argv[2]));
+        boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::make_address(argv[1],ec),std::stoi(argv[2]));
         boost::asio::ip::tcp::socket  socket(io_context); //the context will deliver the implementation
         start_new_connection(socket,endpoint);
         fill_set_errors();
@@ -42,13 +44,14 @@ int main(int argc, char** argv) {
             unsigned int scelta;
             std::unique_lock<std::mutex> ul(mutex);
             std::vector<char> vBuffer(1024); //big buffer , regulate the speed and costs
-            std::string usr(argv[3]);
-            std::string psw(argv[4]);
-            Security security(usr,psw,socket);
+            std::string usr;
+            std::string psw;
+            Security security(usr, psw, socket);
             getSomeData_asyn(security,vBuffer);
             while(true)
             {
-                    menu();
+
+                  menu();
                     std::cout <<"Inserire scelta: ";
                     std::cin >> scelta;
                 switch(scelta)
@@ -56,14 +59,25 @@ int main(int argc, char** argv) {
                     case 1:
                     {
                         //try_lock()
-                        security.register_user();
-                        break;
+                        if(!security.isLogged())
+                            security.register_user();
+                        else{
+                            std::cout<<"Utente "<<usr<<" loggato, eseguire prima un logout."<<std::endl;
+                            continue;
+                        }
+                         break;
                     }
                     case 2:
                     {
                         //try_lock()
-                        security.login();
+                        if(!security.isLogged())
+                            security.login();
+                        else{
+                            std::cout<<"Utente "<<security.getUsr()<<" loggato, eseguire prima un logout."<<std::endl;
+                            continue;
+                        }
                         break;
+                            break;
                     }
                     case 3:
                     {
@@ -74,13 +88,18 @@ int main(int argc, char** argv) {
                     case 4:
                     {
                         security.logout();
-                        cv.wait(ul);
-                        continue;
+                        break;
                     }
 
                     case 5:
                     {
                         exit(EXIT_SUCCESS);
+                    }
+
+                    case 6:
+                    {
+                        file_watcher();
+                        break;
                     }
 
 
@@ -124,7 +143,6 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
                                        }
                                        std::cout<<std::endl;
 
-
                                        //logica applicativa
 
 
@@ -144,8 +162,7 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
                                            std::cout << "Utente gia' presente nel sistema, inserire un diverso username" <<std::endl;
                                            security.same_procedure(MsgType::REGISTER,true);
                                        }
-
-                                        if ( search.find('\b')!=std::string::npos)
+                                       if ( search.find('\b')!=std::string::npos)
                                        {
                                            std::cout << "Login fallito, username o password sbagliate, riprovare" <<std::endl;
                                            security.same_procedure(MsgType::LOGIN,true);
@@ -155,6 +172,7 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
                                        if (search.find(registrazione)!=std::string::npos)
                                        {
                                            //mutex.unlock()
+                                           security.setLogged(true);
                                            cv.notify_all();
                                        }
 
@@ -162,6 +180,8 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
                                        if (search.find(login)!=std::string::npos)
                                        {
                                            //mutex.unlock()
+                                           std::cout<<"Login di user = "<<security.getUsr()<<std::endl;
+                                           security.setLogged(true);
                                            cv.notify_all();
                                        }
 
@@ -170,6 +190,7 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
                                        if (search.find(logout)!=std::string::npos)
                                        {
                                            //mutex.unlock()
+                                           security.setLogged(false);
                                            cv.notify_all();
                                        }
 
@@ -188,15 +209,30 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
                                            cv.notify_all();
                                        }
 
-
-                                       std::string file_str_err("ERRORE, file non trovato o errore generico\r\n");
+                                       std::string file_str_err("FILE CERCATO NON TROVATO\r\n");
                                        if (search.find(file_str_err)!=std::string::npos)
                                        {
                                            //mutex.unlock()
                                            cv.notify_all();
                                        }
-                                        //stampa dei messaggi che arrivano
 
+
+
+                                       std::string timeout("TIMEOUT SESSION EXPIRED\r\n");
+                                       if (search.find(timeout)!=std::string::npos)
+                                       {
+                                           //mutex.unlock()
+                                           cv.notify_all();
+                                           menu();
+                                           std::cout<<"Timeout scaduto, inserire scelta se necessario: "<<std::endl;
+                                       }
+
+                                       std::string err_gnrc("ERRORE, file non trovato o errore generico\r\n");
+                                       if (search.find(err_gnrc)!=std::string::npos)
+                                       {
+                                           //mutex.unlock()
+                                           cv.notify_all();
+                                       }
                                            getSomeData_asyn(security,vBuffer); // isn't a real recursive but a system watching of network data.
                                    }
                                    else std::cout<<ec.message()<<std::endl;
@@ -206,6 +242,31 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
         );
 }
 
+
+void file_watcher()
+{
+    FileWatcher fw{"../client_files",std::chrono::milliseconds(500)};
+    // Start monitoring a folder for changes and (in case of changes)
+    // run a user provided lambda function
+    fw.start([](const std::string &path_to_watch,FileStatus status)-> void {
+        // Process only regular files, all other file types are ignored
+        if(!std::filesystem::is_regular_file(std::filesystem::path(path_to_watch))) //&& status != FileStatus::erased)
+            return;
+        switch(status) {
+            case FileStatus::created:
+                std::cout << "File created: " << path_to_watch << '\n';
+                break;
+            case FileStatus::modified:
+                std::cout << "File modified: " << path_to_watch << '\n';
+                break;
+            case FileStatus::erased:
+                std::cout << "File erased: " << path_to_watch << '\n';
+                break;
+            default:
+                std::cout << "Error! Unknown file status.\n";
+        }
+    });
+}
 
 void menu()
 {
@@ -222,7 +283,6 @@ void menu()
     std::cout<<"###########################################"<<std::endl;
     std::cout<<"#################MENU######################"<<std::endl;
     std::cout<<"###########################################"<<std::endl;
-
 }
 
 //todo

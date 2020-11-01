@@ -36,9 +36,25 @@ void Security::setNonce() const
 
 }
 
-void Security::same_procedure(MsgType msgType,bool repeat) const
+void Security::same_procedure(MsgType msgType,bool thread) const
 {
-    if(repeat) form();
+    //form
+    if(isLogged())
+        return;
+
+    std::cout <<"Inserire nome utente o exit per uscire: ";
+    std::cin >> usr;
+    if(usr=="exit")
+    {
+        if(thread)
+        {
+            cv.notify_all();
+        }
+        return;
+    }
+    std::cout <<"Inserire password: ";
+    std::cin >> psw ;
+    //fine form
     std::vector<unsigned char> cipher_vect;
     Message::message<MsgType> mex;
     mex.set_id(msgType);
@@ -68,16 +84,21 @@ void Security::logout() const
     Message::message<MsgType> fine;
     fine.set_id(MsgType::LOGOUT);
     fine.sendMessage(socket);
+    std::cout<<"Logout di user = "<<usr<<std::endl;
 }
-void Security::form() const
-{
-    std::cout <<"Inserire nome utente: ";
-    std::cin >> usr ;
-    std::cout <<"Inserire password: ";
-    std::cin >> psw ;
+
+
+boost::asio::ip::tcp::socket &Security::getSocket() const {
+    return socket;
 }
-Security::Security(std::string &usr, std::string &psw, boost::asio::ip::tcp::socket &socket)
-        : usr(usr), psw(psw), socket(socket) {}
+
+bool Security::isLogged() const {
+    return logged;
+}
+
+void Security::setLogged(bool logged_){
+    Security::logged = logged_;
+}
 
 std::string &Security::getUsr() const {
     return usr;
@@ -87,6 +108,9 @@ std::string &Security::getPsw() const {
     return psw;
 }
 
-boost::asio::ip::tcp::socket &Security::getSocket() const {
-    return socket;
-}
+Security::Security(std::string &usr, std::string &psw, boost::asio::ip::tcp::socket &socket)
+        : usr(usr), psw(psw), socket(socket) {}
+
+
+
+
