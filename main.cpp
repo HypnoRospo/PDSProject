@@ -224,6 +224,7 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
                                        {
                                            //mutex.unlock()
                                            menu();
+                                           std::cout<<"Operazione terminata, inserire scelta: "<<std::endl;
                                            cv.notify_all();
                                        }
 
