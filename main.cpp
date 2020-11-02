@@ -37,36 +37,42 @@ int main(int argc, char** argv) {
         boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::make_address(argv[1],ec),std::stoi(argv[2]));
         boost::asio::ip::tcp::socket  socket(io_context); //the context will deliver the implementation
         start_new_connection(socket,endpoint);
-        fill_set_errors();
 
         if(socket.is_open())
         {
+            bool exit=true;
             unsigned int scelta;
-            std::vector<std::thread> thread_vector;
+            std::thread fw_thread;
             std::unique_lock<std::mutex> ul(mutex);
             std::vector<char> vBuffer(1024); //big buffer , regulate the speed and costs
             std::string usr;
             std::string psw;
             Security security(usr, psw, socket);
             getSomeData_asyn(security,vBuffer);
-            while(true)
+            while(exit)
             {
                 if(security.isLogged())
                 {
-                    boost::filesystem::create_directories("../"+security.getUsr());
-                    //fase di restore
-                    thread_vector.emplace_back(file_watcher,security);
+                    if(!boost::filesystem::exists("../"+security.getUsr()))
+                    {
+                        boost::filesystem::create_directories("../"+security.getUsr());
+                        fw_thread = std::thread(file_watcher,security);
+                    }
                 }
-                  menu();
+
+                menu();
                     std::cout <<"Inserire scelta: ";
                     std::cin >> scelta;
                 switch(scelta)
                 {
+
                     case 1:
                     {
                         //try_lock()
                         if(!security.isLogged())
+                        {
                             security.register_user();
+                        }
                         else{
                             std::cout<<"Utente "<<usr<<" loggato, eseguire prima un logout."<<std::endl;
                             continue;
@@ -77,7 +83,9 @@ int main(int argc, char** argv) {
                     {
                         //try_lock()
                         if(!security.isLogged())
+                        {
                             security.login();
+                        }
                         else{
                             std::cout<<"Utente "<<security.getUsr()<<" loggato, eseguire prima un logout."<<std::endl;
                             continue;
@@ -94,28 +102,28 @@ int main(int argc, char** argv) {
                     case 4:
                     {
                         security.logout();
-                        thread_vector.front().detach();
                         break;
                     }
 
                     case 5:
                     {
-                        exit(EXIT_SUCCESS);
+                        exit=false;
+                        break;
                     }
-
 
                     default:
                     {
                         std::cout<<"Errore scelta, si prega di riprovare"<<std::endl;
-                        cv.notify_all();
-                        break;
+                        std::cin.clear();
+                        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                        continue;
                     }
 
                 }
                 //lock()
                 cv.wait(ul);
             }
-
+           fw_thread.join();
         }
         io_context.stop();
         if(thrContext.joinable())
@@ -211,6 +219,15 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
                                            cv.notify_all();
                                        }
 
+                                       std::string file_str_R("FILE RICEVUTO CON SUCCESSO\r\n");
+                                       if (search.find(file_str_R)!=std::string::npos)
+                                       {
+                                           //mutex.unlock()
+                                           menu();
+                                           cv.notify_all();
+                                       }
+
+
                                        std::string file_str_err("FILE CERCATO NON TROVATO\r\n");
                                        if (search.find(file_str_err)!=std::string::npos)
                                        {
@@ -246,53 +263,53 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
 
 void file_watcher(Security const & security)
 {
-    FileWatcher fw{"../"+security.getUsr(),std::chrono::milliseconds(3000)};
-    // Start monitoring a folder for changes and (in case of changes)
-    // run a user provided lambda function
-    fw.start([security](const std::string &path_to_watch,FileStatus status)-> void {
-        // Process only regular files, all other file types are ignored
-        if(!std::filesystem::is_regular_file(std::filesystem::path(path_to_watch))) //&& status != FileStatus::erased)
-            return;
-        switch(status) {
-            case FileStatus::created:
-            {
-                std::cout << "File created: " << path_to_watch << '\n';
-                Message::message<MsgType> new_file_msg;
-                new_file_msg.header.id=MsgType::NEW_FILE;
-                std::string path_usr=path_to_watch+"/r/n";
-                std::vector<char> body(path_usr.begin(),path_usr.end());
-                //size_t size = boost::filesystem::file_size(path_to_watch);
-                //body.push_back(size);
+        FileWatcher fw{"../"+security.getUsr(),std::chrono::milliseconds(3000)};
+        // Start monitoring a folder for changes and (in case of changes)
+        // run a user provided lambda function
+        fw.start([security](const std::string &path_to_watch,FileStatus status)-> void {
+            // Process only regular files, all other file types are ignored
+            if(!std::filesystem::is_regular_file(std::filesystem::path(path_to_watch))) //&& status != FileStatus::erased)
+                return;
+            switch(status) {
+                case FileStatus::created:
+                {
+                    std::cout << "File created: " << path_to_watch << '\n';
+                    Message::message<MsgType> new_file_msg;
+                    new_file_msg.header.id=MsgType::NEW_FILE;
+                    std::string path_usr=path_to_watch+"/r/n";
+                    std::vector<char> body(path_usr.begin(),path_usr.end());
+                    //size_t size = boost::filesystem::file_size(path_to_watch);
+                    //body.push_back(size);
 
-                std::ifstream ifs( path_to_watch,std::ios::binary);
-                //ifs.open (path_to_watch, std::ios::binary | std::ios::in);
-                if(ifs){
-                    ifs.seekg(0,std::ifstream::end);
-                    int length = ifs.tellg();
-                    ifs.seekg(0,std::ifstream::beg);
+                    std::ifstream ifs( path_to_watch,std::ios::binary);
+                    //ifs.open (path_to_watch, std::ios::binary | std::ios::in);
+                    if(ifs){
+                        ifs.seekg(0,std::ifstream::end);
+                        int length = ifs.tellg();
+                        ifs.seekg(0,std::ifstream::beg);
 
-                    std::vector<char> vector_buffer(length);
-                    ifs.read(vector_buffer.data(),length);
+                        std::vector<char> vector_buffer(length);
+                        ifs.read(vector_buffer.data(),length);
 
-                    if(ifs)
-                        body.insert( body.end(), vector_buffer.begin(), vector_buffer.end() );
-                    ifs.close();
+                        if(ifs)
+                            body.insert( body.end(), vector_buffer.begin(), vector_buffer.end() );
+                        ifs.close();
+                    }
+
+                    new_file_msg << body;
+                    new_file_msg.sendMessage(security.getSocket());
+                    break;
                 }
-
-                new_file_msg << body;
-                new_file_msg.sendMessage(security.getSocket());
-                break;
+                case FileStatus::modified:
+                    std::cout << "File modified: " << path_to_watch << '\n';
+                    break;
+                case FileStatus::erased:
+                    std::cout << "File erased: " << path_to_watch << '\n';
+                    break;
+                default:
+                    std::cout << "Error! Unknown file status.\n";
             }
-            case FileStatus::modified:
-                std::cout << "File modified: " << path_to_watch << '\n';
-                break;
-            case FileStatus::erased:
-                std::cout << "File erased: " << path_to_watch << '\n';
-                break;
-            default:
-                std::cout << "Error! Unknown file status.\n";
-        }
-    });
+        });
 }
 
 void menu()

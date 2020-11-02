@@ -22,7 +22,7 @@
 
 enum class MsgType : uint32_t
 {
-    NONCE,GETPATH,LOGIN,LOGOUT,REGISTER,CRC,ERROR, TRY_AGAIN_REGISTER,TRY_AGAIN_LOGIN,NEW_FILE
+    NONCE,GETPATH,LOGIN,LOGOUT,REGISTER,CRC,ERROR,TRY_AGAIN_REGISTER,TRY_AGAIN_LOGIN,NEW_FILE
 };
 
 namespace Message {
@@ -128,6 +128,8 @@ struct message
                 return 7;
             case (MsgType::TRY_AGAIN_LOGIN):
                 return 8;
+            case(MsgType::NEW_FILE):
+                return 9;
 
             default:
                 return 6;//-1
