@@ -8,6 +8,8 @@
 #include <fstream>
 #include "Security.h"
 #include "FileWatcher.h"
+#include <boost/crc.hpp>  // for boost::crc_32_type
+
 void getSomeData_asyn(Security& security,std::vector<char>& vBuffer);
 void start_new_connection(boost::asio::ip::tcp::socket& socket, boost::asio::ip::tcp::endpoint& endpoint);
 void file_watcher(Security const & security);
@@ -15,6 +17,13 @@ std::mutex mutex;
 std::condition_variable cv;
 std::set<std::string> set_errors;
 boost::system::error_code ec;
+// Redefine this to change to processing buffer size
+#ifndef PRIVATE_BUFFER_SIZE
+#define PRIVATE_BUFFER_SIZE  8192
+#endif
+
+// Global objects
+std::streamsize const  buffer_size = PRIVATE_BUFFER_SIZE;
 void menu();
 void fill_set_errors();
 int main(int argc, char** argv) {
@@ -272,28 +281,27 @@ void file_watcher(Security const & security)
             if(!std::filesystem::is_regular_file(std::filesystem::path(path_to_watch))) //&& status != FileStatus::erased)
                 return;
             switch(status) {
-                case FileStatus::created:
-                {
+                case FileStatus::created: {
                     std::cout << "File created: " << path_to_watch << '\n';
                     Message::message<MsgType> new_file_msg;
-                    new_file_msg.header.id=MsgType::NEW_FILE;
-                    std::string path_usr=path_to_watch+"/r/n";
-                    std::vector<char> body(path_usr.begin(),path_usr.end());
+                    new_file_msg.header.id = MsgType::NEW_FILE;
+                    std::string path_usr = path_to_watch + "/r/n";
+                    std::vector<char> body(path_usr.begin(), path_usr.end());
                     //size_t size = boost::filesystem::file_size(path_to_watch);
                     //body.push_back(size);
 
-                    std::ifstream ifs( path_to_watch,std::ios::binary);
+                    std::ifstream ifs(path_to_watch, std::ios::binary);
                     //ifs.open (path_to_watch, std::ios::binary | std::ios::in);
-                    if(ifs){
-                        ifs.seekg(0,std::ifstream::end);
+                    if (ifs) {
+                        ifs.seekg(0, std::ifstream::end);
                         int length = ifs.tellg();
-                        ifs.seekg(0,std::ifstream::beg);
+                        ifs.seekg(0, std::ifstream::beg);
 
                         std::vector<char> vector_buffer(length);
-                        ifs.read(vector_buffer.data(),length);
+                        ifs.read(vector_buffer.data(), length);
 
-                        if(ifs)
-                            body.insert( body.end(), vector_buffer.begin(), vector_buffer.end() );
+                        if (ifs)
+                            body.insert(body.end(), vector_buffer.begin(), vector_buffer.end());
                         ifs.close();
                     }
 
@@ -302,8 +310,49 @@ void file_watcher(Security const & security)
                     break;
                 }
                 case FileStatus::modified:
+                    {
                     std::cout << "File modified: " << path_to_watch << '\n';
+                    Message::message<MsgType> new_modified_msg;
+                    new_modified_msg.header.id = MsgType::MODIFIED_FILE;
+                    std::string path_usr = path_to_watch + "/r/n";
+                    std::vector<char> body(path_usr.begin(), path_usr.end());
+                    //size_t size = boost::filesystem::file_size(path_to_watch);
+                    //body.push_back(size);
+                    std::ifstream ifs(path_to_watch, std::ios::binary);
+
+                    /* Calcolo il CRC e invio il messaggio "Path file " + CRC  al server che verifica se gli serve il nuovo file o meno */
+                    std::string checksum_string = Security::calculate_checksum(ifs);
+                    std::string path = checksum_string + "/r/n";
+                    /* Ho impacchettato nel body il path + CRC  */
+                    body.insert(body.end(),path.begin(),path.end());
+                    new_modified_msg << body;
+                    new_modified_msg.sendMessage(security.getSocket());
+
+
+
+                    /* ATTENDIAMO CHE IL SERVER CI DICA SE IL FILE MODIFICATO E' UGUALE A QUELLO CHE HA GIÀ O MENO */
+
+                        /* Se il server vuole il nuovo file allora:
+                         * goto created; */
+
+                    //ifs.open (path_to_watch, std::ios::binary | std::ios::in);
+                    if (ifs) {
+                        ifs.seekg(0, std::ifstream::end);
+                        int length = ifs.tellg();
+                        ifs.seekg(0, std::ifstream::beg);
+
+                        std::vector<char> vector_buffer(length);
+                        ifs.read(vector_buffer.data(), length);
+
+                        if (ifs)
+                            body.insert(body.end(), vector_buffer.begin(), vector_buffer.end());
+                        ifs.close();
+                    }
+
+                    new_modified_msg << body;
+                    new_modified_msg.sendMessage(security.getSocket());
                     break;
+                }
                 case FileStatus::erased:
                     std::cout << "File erased: " << path_to_watch << '\n';
                     break;

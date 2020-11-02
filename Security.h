@@ -29,6 +29,8 @@ public:
     void same_procedure(MsgType msgType,bool repeat) const;
     virtual ~Security();
     void setLogged(bool logged);
+    static std::string calculate_checksum(std::ifstream& ifs);
+
     [[nodiscard]] bool isLogged() const;
     [[nodiscard]] boost::asio::ip::tcp::socket &getSocket() const;
     [[nodiscard]] std::string &getUsr() const;
