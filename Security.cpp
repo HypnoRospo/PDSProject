@@ -11,12 +11,7 @@
 unsigned char key[crypto_secretbox_KEYBYTES] ={"pds_project_key"};
 unsigned char nonce[crypto_secretbox_NONCEBYTES]={};
 // Redefine this to change to processing buffer size
-#ifndef PRIVATE_BUFFER_SIZE
 #define PRIVATE_BUFFER_SIZE  8192
-#endif
-
-// Global objects
-std::streamsize const  buffer_size = PRIVATE_BUFFER_SIZE;
 
 Security::~Security() = default;
 
@@ -120,6 +115,7 @@ std::string &Security::getPsw() const {
 
 std::string Security::calculate_checksum(std::ifstream &ifs) {
 
+    std::streamsize const  buffer_size = PRIVATE_BUFFER_SIZE;
     std::string error = "Errore calcolo CRC";
 
        try
@@ -128,13 +124,22 @@ std::string Security::calculate_checksum(std::ifstream &ifs) {
         clock_t tStart = clock();
         if ( ifs )
         {
-            do
+            // get length of file:
+            ifs.seekg (0, std::ifstream::end);
+            int length = ifs.tellg();
+            ifs.seekg (0, std::ifstream::beg);
+            //
+            if(length > buffer_size)
             {
-                char  buffer[ buffer_size ];
-
-                ifs.read( buffer, buffer_size );
-                result.process_bytes( buffer, ifs.gcount() );
-            } while ( ifs );
+                std::vector<char>   buffer(buffer_size);
+                while(ifs.read(&buffer[0], buffer_size))
+                    result.process_bytes(&buffer[0], ifs.gcount());
+            }
+            else {
+                std::vector<char> buffer(length);
+                ifs.read(&buffer[0],length);
+                result.process_bytes(&buffer[0],ifs.gcount());
+            }
         }
         else
         {
@@ -146,8 +151,7 @@ std::string Security::calculate_checksum(std::ifstream &ifs) {
 
         std::stringstream stream;
         stream << std::hex << std::uppercase << result.checksum();
-        std::string res = stream.str();
-        return res;
+        return stream.str();
 
     }
        catch ( std::exception &e )

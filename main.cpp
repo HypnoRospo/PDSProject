@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <condition_variable>
 #include <boost/algorithm/string/find.hpp>
+#include <boost/filesystem.hpp>
 #include <boost/filesystem/operations.hpp>
 #include <set>
 #include <fstream>
@@ -45,6 +46,12 @@ int main(int argc, char** argv) {
         std::thread thrContext = std::thread([&] () {io_context.run();}); //start context in background
         boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::make_address(argv[1],ec),std::stoi(argv[2]));
         boost::asio::ip::tcp::socket  socket(io_context); //the context will deliver the implementation
+
+        std::string root_path("../client_users");
+        if(!boost::filesystem::exists(root_path)) {
+            boost::filesystem::create_directory(root_path);
+        }
+        boost::filesystem::current_path(root_path);
         start_new_connection(socket,endpoint);
 
         if(socket.is_open())
@@ -62,9 +69,9 @@ int main(int argc, char** argv) {
             {
                 if(security.isLogged())
                 {
-                    if(!boost::filesystem::exists("../"+security.getUsr()))
+                    if(!boost::filesystem::exists(security.getUsr()))
                     {
-                        boost::filesystem::create_directories("../"+security.getUsr());
+                        boost::filesystem::create_directory(security.getUsr());
                         fw_thread = std::thread(file_watcher,security);
                     }
                 }
@@ -249,15 +256,15 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
                                        {
                                            //logica di spacchettamento
                                            std::vector<char> fill;
-                                           std::string delimiter = "/r/n";
+                                           std::string delimiter = "\r\n";
                                            std::string path_user;
                                            std::string body(vBuffer.begin(),vBuffer.end());
-                                           path_user = body.substr(body.find(delimiter), body.find_last_of(delimiter));
+                                           path_user = body.substr(body.find_first_of(".."), body.find_last_of(delimiter));
                                            prepare_file(path_user,fill);
                                            //send message to server
                                            Message::message<MsgType> new_file_msg;
                                            new_file_msg.header.id = MsgType::NEW_FILE;
-                                           path_user+=delimiter;
+                                           //path_user+=delimiter;
                                            std::vector<char> path_user_vector(path_user.begin(),path_user.end());
                                            std::vector<char> total;
                                            total.reserve( path_user.size() + fill.size() ); // preallocate memory
@@ -303,7 +310,7 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
 
 void file_watcher(Security const & security)
 {
-        FileWatcher fw{"../"+security.getUsr(),std::chrono::milliseconds(3000)};
+        FileWatcher fw{security.getUsr(),std::chrono::milliseconds(3000)};
         // Start monitoring a folder for changes and (in case of changes)
         // run a user provided lambda function
         fw.start([&](const std::string &path_to_watch,FileStatus status)-> void {
@@ -316,7 +323,7 @@ void file_watcher(Security const & security)
                     std::cout << "File created: " << path_to_watch << '\n';
                     Message::message<MsgType> new_file_msg;
                     new_file_msg.header.id = MsgType::NEW_FILE;
-                    std::string path_usr = path_to_watch + "/r/n";
+                    std::string path_usr = path_to_watch + "\r\n";
                     std::vector<char> body(path_usr.begin(), path_usr.end());
                     prepare_file(path_to_watch,body);
                     new_file_msg << body;
@@ -328,12 +335,12 @@ void file_watcher(Security const & security)
                     std::cout << "File modified: " << path_to_watch << '\n';
                     Message::message<MsgType> new_modified_msg;
                     new_modified_msg.header.id = MsgType::MODIFIED_FILE;
-                    std::string path_usr = path_to_watch + "/r/n";
+                    std::string path_usr = path_to_watch + "\r\n";
                     std::vector<char> body(path_usr.begin(), path_usr.end());
                     std::ifstream ifs(path_to_watch, std::ios::binary);
                     /* Calcolo il CRC e invio il messaggio "Path file " + CRC  al server che verifica se gli serve il nuovo file o meno */
                     std::string checksum_string = Security::calculate_checksum(ifs);
-                    std::string path = checksum_string + "/r/n";
+                    std::string path = checksum_string + "\r\n";
                     /* Ho impacchettato nel body il path + CRC  */
                     body.insert(body.end(),path.begin(),path.end());
 
