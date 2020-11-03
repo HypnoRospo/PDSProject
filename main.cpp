@@ -3,13 +3,11 @@
 #include <algorithm>
 #include <condition_variable>
 #include <boost/algorithm/string/find.hpp>
-#include <boost/filesystem.hpp>
 #include <boost/filesystem/operations.hpp>
 #include <set>
 #include <fstream>
 #include "Security.h"
 #include "FileWatcher.h"
-#include <boost/crc.hpp>  // for boost::crc_32_type
 
 void getSomeData_asyn(Security& security,std::vector<char>& vBuffer);
 void start_new_connection(boost::asio::ip::tcp::socket& socket, boost::asio::ip::tcp::endpoint& endpoint);
@@ -19,12 +17,7 @@ std::condition_variable cv;
 std::set<std::string> set_errors;
 boost::system::error_code ec;
 // Redefine this to change to processing buffer size
-#ifndef PRIVATE_BUFFER_SIZE
-#define PRIVATE_BUFFER_SIZE  8192
-#endif
 
-// Global objects
-std::streamsize const  buffer_size = PRIVATE_BUFFER_SIZE;
 void menu();
 void prepare_file(const std::string& path_to_watch ,std::vector<char>& body);
 int main(int argc, char** argv) {
@@ -259,7 +252,7 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
                                            std::string delimiter = "\r\n";
                                            std::string path_user;
                                            std::string body(vBuffer.begin(),vBuffer.end());
-                                           path_user = body.substr(body.find_first_of(".."), body.find_last_of(delimiter));
+                                           path_user = body.substr(body.find_first_of(delimiter), body.find_last_of(delimiter));
                                            prepare_file(path_user,fill);
                                            //send message to server
                                            Message::message<MsgType> new_file_msg;

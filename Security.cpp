@@ -2,6 +2,7 @@
 // Created by enrico_scalabrino on 27/10/20.
 //
 
+#define PRIVATE_BUFFER_SIZE  8192
 #include "Security.h"
 #include "Message.h"
 #include <sodium/crypto_secretbox.h>
@@ -11,7 +12,6 @@
 unsigned char key[crypto_secretbox_KEYBYTES] ={"pds_project_key"};
 unsigned char nonce[crypto_secretbox_NONCEBYTES]={};
 // Redefine this to change to processing buffer size
-#define PRIVATE_BUFFER_SIZE  8192
 
 Security::~Security() = default;
 
@@ -116,9 +116,8 @@ std::string &Security::getPsw() const {
 std::string Security::calculate_checksum(std::ifstream &ifs) {
 
     std::streamsize const  buffer_size = PRIVATE_BUFFER_SIZE;
-    std::string error = "Errore calcolo CRC";
 
-       try
+    try
     {
         boost::crc_32_type  result;
         clock_t tStart = clock();
@@ -129,6 +128,7 @@ std::string Security::calculate_checksum(std::ifstream &ifs) {
             int length = ifs.tellg();
             ifs.seekg (0, std::ifstream::beg);
             //
+
             if(length > buffer_size)
             {
                 std::vector<char>   buffer(buffer_size);
@@ -154,19 +154,19 @@ std::string Security::calculate_checksum(std::ifstream &ifs) {
         return stream.str();
 
     }
-       catch ( std::exception &e )
-       {
-           std::cerr << "Found an exception with '" << e.what() << "'." << std::endl;
-          return error;
-           /* VA GESTITA LA RETURN ADATTA */
-       }
-       catch ( ... )
-       {
-           std::cerr << "Found an unknown exception." << std::endl;
-          return error;
-           /* VA GESTITA LA RETURN ADATTA */
+    catch ( std::exception &e )
+    {
+        std::cerr << "Found an exception with '" << e.what() << "'." << std::endl;
+        return e.what();
+        /* VA GESTITA LA RETURN ADATTA */
+    }
+    catch ( ... )
+    {
+        std::cerr << "Found an unknown exception." << std::endl;
+        return "Errore sconosciuto sul calcolo CRC";
+        /* VA GESTITA LA RETURN ADATTA */
 
-       }
+    }
 
 }
 
