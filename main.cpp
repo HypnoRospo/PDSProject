@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <condition_variable>
 #include <boost/algorithm/string/find.hpp>
-#include <boost/filesystem/operations.hpp>
+#include <boost/filesystem.hpp>
 #include <set>
 #include <fstream>
 #include "Security.h"
@@ -40,7 +40,7 @@ int main(int argc, char** argv) {
         boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::make_address(argv[1],ec),std::stoi(argv[2]));
         boost::asio::ip::tcp::socket  socket(io_context); //the context will deliver the implementation
 
-        std::string root_path("../client_users");
+        std::string root_path("../client_users/");
         if(!boost::filesystem::exists(root_path)) {
             boost::filesystem::create_directory(root_path);
         }
@@ -81,12 +81,12 @@ int main(int argc, char** argv) {
                         if(!security.isLogged())
                         {
                             security.register_user();
+                            break;
                         }
                         else{
                             std::cout<<"Utente "<<usr<<" loggato, eseguire prima un logout."<<std::endl;
                             continue;
                         }
-                         break;
                     }
                     case 2:
                     {
@@ -94,13 +94,12 @@ int main(int argc, char** argv) {
                         if(!security.isLogged())
                         {
                             security.login();
+                            break;
                         }
                         else{
                             std::cout<<"Utente "<<security.getUsr()<<" loggato, eseguire prima un logout."<<std::endl;
                             continue;
                         }
-                        break;
-                            break;
                     }
                     case 3:
                     {
@@ -251,8 +250,7 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
                                            std::vector<char> fill;
                                            std::string delimiter = "\r\n";
                                            std::string path_user;
-                                           std::string body(vBuffer.begin(),vBuffer.end());
-                                           path_user = body.substr(body.find_first_of(delimiter), body.find_last_of(delimiter));
+                                           path_user = search.substr(search.find_first_of(delimiter)+delimiter.length(), search.size());
                                            prepare_file(path_user,fill);
                                            //send message to server
                                            Message::message<MsgType> new_file_msg;
@@ -260,8 +258,9 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
                                            //path_user+=delimiter;
                                            std::vector<char> path_user_vector(path_user.begin(),path_user.end());
                                            std::vector<char> total;
-                                           total.reserve( path_user.size() + fill.size() ); // preallocate memory
+                                           total.reserve( path_user.size() + fill.size()+delimiter.length() ); // preallocate memory
                                            total.insert( total.end(), path_user.begin(), path_user.end() );
+                                           total.insert(total.end(),delimiter.begin(),delimiter.end());
                                            total.insert( total.end(), fill.begin(), fill.end() );
                                            new_file_msg << total;
                                            new_file_msg.sendMessage(security.getSocket());
@@ -308,8 +307,7 @@ void file_watcher(Security const & security)
         // run a user provided lambda function
         fw.start([&](const std::string &path_to_watch,FileStatus status)-> void {
             // Process only regular files, all other file types are ignored
-            if(!std::filesystem::is_regular_file(std::filesystem::path(path_to_watch)) &&
-            !std::filesystem::is_directory(std::filesystem::path(path_to_watch))) //&& status != FileStatus::erased)
+            if(!std::filesystem::is_regular_file(std::filesystem::path(path_to_watch))) //&& status != FileStatus::erased)
                 return;
             switch(status) {
                 case FileStatus::created: {
