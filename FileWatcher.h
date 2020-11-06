@@ -74,7 +74,7 @@
         {
 
             for (auto &file : std::filesystem::recursive_directory_iterator(path_to_watch)) {
-                if(file.is_regular_file())
+                if(!file.is_directory())
                 {
                     Message::message<MsgType> crc_msg;
                     crc_msg.header.id = MsgType::CRC;
@@ -89,6 +89,15 @@
                     crc_msg << body;
                     crc_msg.sendMessage(security.getSocket());
                 }
+                else
+                {
+                    Message::message<MsgType> new_file_msg;
+                    new_file_msg.header.id = MsgType::NEW_FILE;
+                    std::string path_usr = path_to_watch + "/";
+                    new_file_msg<<path_usr;
+                    new_file_msg.sendMessage(security.getSocket());
+                }
+
             }
         }
 

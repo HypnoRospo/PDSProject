@@ -55,7 +55,6 @@ int main(int argc, char** argv) {
         {
             bool on=true;
             unsigned int scelta;
-            std::thread fw_thread;
             std::vector<char> vBuffer(1024); //big buffer , regulate the speed and costs
             std::string usr;
             std::string psw;
@@ -370,24 +369,15 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
                                        {
                                            //mutex.unlock()
                                            //cv.notify_all();
-                                           std::unique_lock<std::mutex> lk(mutex);
-                                           cv.wait(lk, []{return ready;});
-                                           // Send data back to main()
-                                           processed = true;
-                                           logged=false;
-                                           // Manual unlocking is done before notifying, to avoid waking up
-                                           // the waiting thread only to block again (see notify_one for details)
-                                           lk.unlock();
+                                           if(!ready && !processed) // siamo in afk
+                                           {
+                                               logged=false; //todo da rivedere non worka sempre credo, domani
+                                           }
+
                                            menu();
                                            std::cout<<"Timeout scaduto, inserire scelta se necessario: "<<std::endl;
                                        }
 
-                                       std::string err_gnrc("ERRORE, file non trovato o errore generico\r\n");
-                                       if (search.find(err_gnrc)!=std::string::npos)
-                                       {
-                                           //mutex.unlock()
-                                           //cv.notify_all();
-                                       }
                                            getSomeData_asyn(security,vBuffer); // isn't a real recursive but a system watching of network data.
                                    }
                                    else std::cout<<ec.message()<<std::endl;
