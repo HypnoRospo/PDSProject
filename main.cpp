@@ -438,6 +438,8 @@ void file_watcher(Security const & security)
             }
             case FileStatus::erased:
             {
+                //non riesce a capire se e' un file o direttorio, per file senza estensione
+                // ..nessun problema pratico almeno credo
                 if(file) std::cout << "File erased: " << path_to_watch <<std::endl;
                 else std::cout <<"Folder erased: "<< path_to_watch<<std::endl;
                 Message::message<MsgType> new_file_msg;
