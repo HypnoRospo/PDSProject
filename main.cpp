@@ -442,7 +442,7 @@ void file_watcher(Security const & security)
                 else std::cout <<"Folder erased: "<< path_to_watch<<std::endl;
                 Message::message<MsgType> new_file_msg;
                 new_file_msg.header.id = MsgType::DELETE;
-                std::string path_usr = path_to_watch + "/";
+                std::string path_usr = path_to_watch + "\r\n";
                 new_file_msg<<path_usr;
                 new_file_msg.sendMessage(security.getSocket());
                 break;
