@@ -370,6 +370,14 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
                                        {
                                            //mutex.unlock()
                                            //cv.notify_all();
+                                           std::unique_lock<std::mutex> lk(mutex);
+                                           cv.wait(lk, []{return ready;});
+                                           // Send data back to main()
+                                           processed = true;
+                                           logged=false;
+                                           // Manual unlocking is done before notifying, to avoid waking up
+                                           // the waiting thread only to block again (see notify_one for details)
+                                           lk.unlock();
                                            menu();
                                            std::cout<<"Timeout scaduto, inserire scelta se necessario: "<<std::endl;
                                        }
@@ -409,7 +417,7 @@ void file_watcher(Security const & security)
         switch(status) {
             case FileStatus::created:
             case FileStatus::modified:{
-                if(file)
+                if(!folder)
                 {
                     if(status==FileStatus::created)
                     std::cout << "File created: " << path_to_watch <<std::endl;
@@ -440,7 +448,7 @@ void file_watcher(Security const & security)
             {
                 //non riesce a capire se e' un file o direttorio, per file senza estensione
                 // ..nessun problema pratico almeno credo
-                if(file) std::cout << "File erased: " << path_to_watch <<std::endl;
+                if(!folder) std::cout << "File erased: " << path_to_watch <<std::endl;
                 else std::cout <<"Folder erased: "<< path_to_watch<<std::endl;
                 Message::message<MsgType> new_file_msg;
                 new_file_msg.header.id = MsgType::DELETE;
@@ -449,8 +457,6 @@ void file_watcher(Security const & security)
                 new_file_msg.sendMessage(security.getSocket());
                 break;
             }
-
-
 
             default:
                 std::cout << "Error! Unknown file status.\n";
