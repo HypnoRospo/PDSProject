@@ -12,7 +12,6 @@
 #include <unordered_map>
 #include <string>
 #include <functional>
-
  // Define available file changes
  enum class FileStatus {created, modified, erased};
 
@@ -23,7 +22,7 @@
             std::chrono::duration<int, std::milli> delay;
 
              // Keep a record of files from the base directory and their last modification time
-             FileWatcher(const std::string &path_to_watch, std::chrono::duration<int, std::milli> delay) : path_to_watch{path_to_watch}, delay{delay} {
+             FileWatcher(const std::string &path_to_watch, std::chrono::duration<int, std::milli> delay,const Security& security) : path_to_watch{path_to_watch}, delay{delay} {
 
             for (auto &file : std::filesystem::recursive_directory_iterator(path_to_watch)) {
                 paths_[file.path().string()] = std::filesystem::last_write_time(file);
@@ -32,6 +31,11 @@
 
         void start(const std::function<void (std::string, FileStatus)> &action) {
             while(running_){
+                if(!logged)
+                {
+                    running_=false;
+                    break;
+                }
                 // Wait for "delay" milliseconds
                 std::this_thread::sleep_for(delay);
 
@@ -57,6 +61,7 @@
                         // File modification
                     } else {
                         if(paths_[file.path().string()] != current_file_last_write_time) {
+                            //logica qui per capire se e' in realta' rename
                             paths_[file.path().string()] = current_file_last_write_time;
                             action(file.path().string(), FileStatus::modified);
                         }
@@ -64,6 +69,29 @@
                 }
             }
         }
+
+        void sync(Security const & security) const
+        {
+
+            for (auto &file : std::filesystem::recursive_directory_iterator(path_to_watch)) {
+                if(file.is_regular_file())
+                {
+                    Message::message<MsgType> crc_msg;
+                    crc_msg.header.id = MsgType::CRC;
+                    std::string path_usr = file.path().string() + "\r\n";
+                    std::vector<char> body(path_usr.begin(), path_usr.end());
+                    std::ifstream ifs(file.path().string(), std::ios::binary);
+                    /* Calcolo il CRC e invio il messaggio "Path file " + CRC  al server che verifica se gli serve il nuovo file o meno */
+                    std::string checksum_string = Security::calculate_checksum(ifs);
+                    std::string path = checksum_string + "\r\n";
+                    /* Ho impacchettato nel body il path + CRC  */
+                    body.insert(body.end(),path.begin(),path.end());
+                    crc_msg << body;
+                    crc_msg.sendMessage(security.getSocket());
+                }
+            }
+        }
+
     private:
         std::unordered_map<std::string, std::filesystem::file_time_type> paths_;
            bool running_ = true;

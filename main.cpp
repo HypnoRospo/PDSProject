@@ -1,6 +1,7 @@
 #include <iostream>
 #include <thread>
 #include <algorithm>
+#include <boost/algorithm/string.hpp>
 #include <condition_variable>
 #include <boost/algorithm/string/find.hpp>
 #include <boost/filesystem.hpp>
@@ -14,7 +15,10 @@ void start_new_connection(boost::asio::ip::tcp::socket& socket, boost::asio::ip:
 void file_watcher(Security const & security);
 std::mutex mutex;
 std::condition_variable cv;
-std::set<std::string> set_errors;
+bool ready = false;
+bool processed = false;
+bool logged =false;
+std::thread fw_thread;
 boost::system::error_code ec;
 // Redefine this to change to processing buffer size
 
@@ -49,38 +53,30 @@ int main(int argc, char** argv) {
 
         if(socket.is_open())
         {
-            bool exit=true;
+            bool on=true;
             unsigned int scelta;
             std::thread fw_thread;
-            std::unique_lock<std::mutex> ul(mutex);
             std::vector<char> vBuffer(1024); //big buffer , regulate the speed and costs
             std::string usr;
             std::string psw;
             Security security(usr, psw, socket);
             getSomeData_asyn(security,vBuffer);
-            while(exit)
+            while(on)
             {
-                if(security.isLogged())
-                {
-                    if(!boost::filesystem::exists(security.getUsr()))
-                    {
-                        boost::filesystem::create_directory(security.getUsr());
-                        fw_thread = std::thread(file_watcher,security);
-                    }
-                }
-
                 menu();
                     std::cout <<"Inserire scelta: ";
                     std::cin >> scelta;
                 switch(scelta)
                 {
-
                     case 1:
                     {
                         //try_lock()
-                        if(!security.isLogged())
+                        if(!logged)
                         {
                             security.register_user();
+                            std::lock_guard<std::mutex> lk(mutex);
+                            ready = true;
+                            cv.notify_one();
                             break;
                         }
                         else{
@@ -91,9 +87,12 @@ int main(int argc, char** argv) {
                     case 2:
                     {
                         //try_lock()
-                        if(!security.isLogged())
+                        if(!logged)
                         {
                             security.login();
+                            std::lock_guard<std::mutex> lk(mutex);
+                            ready = true;
+                            cv.notify_one();
                             break;
                         }
                         else{
@@ -105,17 +104,26 @@ int main(int argc, char** argv) {
                     {
                         //try_lock()
                         security.getData();
+                        std::lock_guard<std::mutex> lk(mutex);
+                        ready = true;
+                        cv.notify_one();
                         break;
                     }
                     case 4:
                     {
+                        //try lock
                         security.logout();
-                        break;
+                        std::lock_guard<std::mutex> lk(mutex);
+                        ready = true;
+                        logged=false;
+                        cv.notify_one();
+                       break;
                     }
 
                     case 5:
                     {
-                        exit=false;
+                        on=false;
+                        logged=false;
                         break;
                     }
 
@@ -129,13 +137,28 @@ int main(int argc, char** argv) {
 
                 }
                 //lock()
-                cv.wait(ul);
+                if(on)
+                {
+                    std::unique_lock<std::mutex> lk(mutex);
+                    cv.wait(lk, []{return processed;});
+                    /*
+                    if(!logged)
+                    {
+                        fw_thread.join();
+                    }
+                     */
+                    ready=false;
+                    processed=false;
+                }
             }
-           fw_thread.join();
         }
+        //pulisco risorse
         io_context.stop();
-        if(thrContext.joinable())
             thrContext.join();
+            sleep(1); // behind reason
+        if(fw_thread.joinable()) // must wait if filewatcher has delay too long, in this case not
+            fw_thread.join();
+        socket.close();
     }
     catch (std::exception& e)
     {
@@ -166,14 +189,6 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
 
                                        std::string search(vBuffer.begin(),vBuffer.begin()+length);
 
-                                       /*
-                                       std::cout<<"STAMPA DI SEARCH-> "<<std::endl;
-                                       std::cout<<":::"<<search<<std::endl;
-                                       std::cout<<"STAMPA DI BUFFER-> "<<std::endl;
-                                       std::cout<<":::"<<vBuffer.data()<<std::endl;
-
-                                        */
-                                       //std::cout.write(search.c_str(), search.length());
 
                                        if ( search.find('\a')!=std::string::npos)
                                        {
@@ -190,17 +205,50 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
                                        if (search.find(registrazione)!=std::string::npos)
                                        {
                                            //mutex.unlock()
-                                           security.setLogged(true);
-                                           cv.notify_all();
+
+                                           std::unique_lock<std::mutex> lk(mutex);
+                                           cv.wait(lk, []{return ready;});
+
+                                           std::cout<<"Login di user = "<<security.getUsr()<<std::endl;
+
+                                           logged=true;
+
+                                           // Send data back to main()
+                                           processed = true;
+                                           // Manual unlocking is done before notifying, to avoid waking up
+                                           // the waiting thread only to block again (see notify_one for details)
+                                           lk.unlock();
+                                           cv.notify_one();
+
+                                           if(!boost::filesystem::exists(security.getUsr())) {
+                                               boost::filesystem::create_directory(security.getUsr());
+                                           }
+                                           fw_thread = std::thread(file_watcher,security);
                                        }
 
                                        std::string login("CLIENT LOGGED\r\n");
                                        if (search.find(login)!=std::string::npos)
                                        {
                                            //mutex.unlock()
+
+                                           std::unique_lock<std::mutex> lk(mutex);
+                                           cv.wait(lk, []{return ready;});
+
                                            std::cout<<"Login di user = "<<security.getUsr()<<std::endl;
-                                           security.setLogged(true);
-                                           cv.notify_all();
+
+                                           logged=true;
+
+                                           // Send data back to main()
+                                           processed = true;
+                                           // Manual unlocking is done before notifying, to avoid waking up
+                                           // the waiting thread only to block again (see notify_one for details)
+                                           lk.unlock();
+                                           cv.notify_one();
+
+                                           if(!boost::filesystem::exists(security.getUsr())) {
+                                               boost::filesystem::create_directory(security.getUsr());
+                                           }
+                                           fw_thread = std::thread(file_watcher,security);
                                        }
 
 
@@ -208,23 +256,47 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
                                        if (search.find(logout)!=std::string::npos)
                                        {
                                            //mutex.unlock()
-                                           security.setLogged(false);
-                                           cv.notify_all();
+
+                                           std::unique_lock<std::mutex> lk(mutex);
+                                           cv.wait(lk, []{return ready;});
+
+                                           logged=false;
+                                           std::cout<<logout<<std::endl;
+
+                                           fw_thread.join();
+                                           // Send data back to main()
+                                           processed = true;
+                                           // Manual unlocking is done before notifying, to avoid waking up
+                                           // the waiting thread only to block again (see notify_one for details)
+                                           lk.unlock();
+                                           cv.notify_one();
                                        }
 
                                        std::string logout_err("LOGOUT FALLITO\r\n");
                                        if (search.find(logout_err)!=std::string::npos)
                                        {
-                                           //mutex.unlock()
-                                           cv.notify_all();
+                                           std::unique_lock<std::mutex> lk(mutex);
+                                           cv.wait(lk, []{return ready;});
+                                           // Send data back to main()
+                                           processed = true;
+                                           // Manual unlocking is done before notifying, to avoid waking up
+                                           // the waiting thread only to block again (see notify_one for details)
+                                           lk.unlock();
+                                           cv.notify_one();
                                        }
 
 
                                        std::string file_str("FILE MANDATO CON SUCCESSO\r\n");
                                        if (search.find(file_str)!=std::string::npos)
                                        {
-                                           //mutex.unlock()
-                                           cv.notify_all();
+                                           std::unique_lock<std::mutex> lk(mutex);
+                                           cv.wait(lk, []{return ready;});
+                                           // Send data back to main()
+                                           processed = true;
+                                           // Manual unlocking is done before notifying, to avoid waking up
+                                           // the waiting thread only to block again (see notify_one for details)
+                                           lk.unlock();
+                                           cv.notify_one();
                                        }
 
                                        std::string file_str_R("FILE RICEVUTO CON SUCCESSO\r\n");
@@ -233,53 +305,71 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
                                            //mutex.unlock()
                                            menu();
                                            std::cout<<"Operazione terminata, inserire scelta: "<<std::endl;
-                                           cv.notify_all();
+                                           //cv.notify_all();
                                        }
 
                                        std::string checksum_result("CHECKSUM CORRETTO\r\n");
                                        if(search.find(checksum_result)!=std::string::npos)
                                        {
                                            std::cout<<"File nel server gia' aggiornato"<<std::endl;
-                                           cv.notify_all();
+                                           //cv.notify_all();
                                        }
 
                                        std::string checksum_result_not("CHECKSUM NON CORRETTO\r\n");
                                        if(search.find(checksum_result_not)!=std::string::npos)
                                        {
+
+                                           //cv.notify_all(); //sveglio gia il client, non aspetto
                                            //logica di spacchettamento
-                                           std::vector<char> fill;
+                                           std::string::size_type pos = 0;
                                            std::string delimiter = "\r\n";
-                                           std::string path_user;
-                                           path_user = search.substr(search.find_first_of(delimiter)+delimiter.length(), search.size());
-                                           prepare_file(path_user,fill);
-                                           //send message to server
-                                           Message::message<MsgType> new_file_msg;
-                                           new_file_msg.header.id = MsgType::NEW_FILE;
-                                           //path_user+=delimiter;
-                                           std::vector<char> path_user_vector(path_user.begin(),path_user.end());
-                                           std::vector<char> total;
-                                           total.reserve( path_user.size() + fill.size()+delimiter.length() ); // preallocate memory
-                                           total.insert( total.end(), path_user.begin(), path_user.end() );
-                                           total.insert(total.end(),delimiter.begin(),delimiter.end());
-                                           total.insert( total.end(), fill.begin(), fill.end() );
-                                           new_file_msg << total;
-                                           new_file_msg.sendMessage(security.getSocket());
-                                           cv.notify_all();
+                                           while ((pos = search.find(delimiter, pos )) != std::string::npos) {
+                                               if(pos==length-delimiter.length()) //siamo arrivati alla fine, esco
+                                                   break;
+                                               std::vector<char> fill;
+                                               std::string path_user;
+                                               //std::string path_user(boost::find_nth(search,delimiter,i+1).begin(),boost::find_nth(search,delimiter,i+2).begin());
+                                               path_user = search.substr(pos+delimiter.length(),search.find(delimiter,pos+delimiter.length())-(pos+delimiter.length()));
+                                               if(boost::filesystem::is_regular_file(path_user))
+                                               {
+                                                   prepare_file(path_user,fill);
+                                                   //send message to server
+                                                   Message::message<MsgType> new_file_msg;
+                                                   new_file_msg.header.id = MsgType::NEW_FILE;
+                                                   //path_user+=delimiter;
+                                                   std::vector<char> path_user_vector(path_user.begin(),path_user.end());
+                                                   std::vector<char> total;
+                                                   total.reserve( path_user.size() + fill.size()+delimiter.length() ); // preallocate memory
+                                                   total.insert( total.end(), path_user.begin(), path_user.end() );
+                                                   total.insert(total.end(),delimiter.begin(),delimiter.end());
+                                                   total.insert( total.end(), fill.begin(), fill.end() );
+                                                   new_file_msg << total;
+                                                   new_file_msg.sendMessage(security.getSocket());
+                                               }
+                                               pos += delimiter.length();
+                                           }
                                        }
 
                                        std::string file_str_err("FILE CERCATO NON TROVATO\r\n");
                                        if (search.find(file_str_err)!=std::string::npos)
                                        {
                                            //mutex.unlock()
-                                           cv.notify_all();
+                                           //cv.notify_all();
+                                           std::unique_lock<std::mutex> lk(mutex);
+                                           cv.wait(lk, []{return ready;});
+                                           // Send data back to main()
+                                           processed = true;
+                                           // Manual unlocking is done before notifying, to avoid waking up
+                                           // the waiting thread only to block again (see notify_one for details)
+                                           lk.unlock();
+                                           cv.notify_one();
                                        }
-
 
                                        std::string timeout("TIMEOUT SESSION EXPIRED\r\n");
                                        if (search.find(timeout)!=std::string::npos)
                                        {
                                            //mutex.unlock()
-                                           cv.notify_all();
+                                           //cv.notify_all();
                                            menu();
                                            std::cout<<"Timeout scaduto, inserire scelta se necessario: "<<std::endl;
                                        }
@@ -288,7 +378,7 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
                                        if (search.find(err_gnrc)!=std::string::npos)
                                        {
                                            //mutex.unlock()
-                                           cv.notify_all();
+                                           //cv.notify_all();
                                        }
                                            getSomeData_asyn(security,vBuffer); // isn't a real recursive but a system watching of network data.
                                    }
@@ -302,16 +392,28 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
 
 void file_watcher(Security const & security)
 {
-        FileWatcher fw{security.getUsr(),std::chrono::milliseconds(3000)};
-        // Start monitoring a folder for changes and (in case of changes)
-        // run a user provided lambda function
-        fw.start([&](const std::string &path_to_watch,FileStatus status)-> void {
-            // Process only regular files, all other file types are ignored
-            if(!std::filesystem::is_regular_file(std::filesystem::path(path_to_watch))) //&& status != FileStatus::erased)
+    FileWatcher fw{security.getUsr(),std::chrono::milliseconds(500),security}; //passo tutto security per comodita'
+    // Start monitoring a folder for changes and (in case of changes)
+    // run a user provided lambda function
+
+    fw.sync(security);
+
+    fw.start([&](const std::string &path_to_watch,FileStatus status)-> void {
+        bool file=std::filesystem::is_regular_file(std::filesystem::path(path_to_watch));
+        bool folder=std::filesystem::is_directory(std::filesystem::path(path_to_watch));
+        // Process only regular files, all other file types are ignored
+        if(!file && !folder && status != FileStatus::erased)
+        {
                 return;
-            switch(status) {
-                case FileStatus::created: {
-                    std::cout << "File created: " << path_to_watch << '\n';
+        }
+        switch(status) {
+            case FileStatus::created:
+            case FileStatus::modified:{
+                if(file)
+                {
+                    if(status==FileStatus::created)
+                    std::cout << "File created: " << path_to_watch <<std::endl;
+                    else std::cout <<"File modified: "<< path_to_watch<<std::endl;
                     Message::message<MsgType> new_file_msg;
                     new_file_msg.header.id = MsgType::NEW_FILE;
                     std::string path_usr = path_to_watch + "\r\n";
@@ -321,31 +423,37 @@ void file_watcher(Security const & security)
                     new_file_msg.sendMessage(security.getSocket());
                     break;
                 }
-                case FileStatus::modified:
-                    {
-                    std::cout << "File modified: " << path_to_watch << '\n';
-                    Message::message<MsgType> new_modified_msg;
-                    new_modified_msg.header.id = MsgType::MODIFIED_FILE;
-                    std::string path_usr = path_to_watch + "\r\n";
-                    std::vector<char> body(path_usr.begin(), path_usr.end());
-                    std::ifstream ifs(path_to_watch, std::ios::binary);
-                    /* Calcolo il CRC e invio il messaggio "Path file " + CRC  al server che verifica se gli serve il nuovo file o meno */
-                    std::string checksum_string = Security::calculate_checksum(ifs);
-                    std::string path = checksum_string + "\r\n";
-                    /* Ho impacchettato nel body il path + CRC  */
-                    body.insert(body.end(),path.begin(),path.end());
-
-                    new_modified_msg << body;
-                    new_modified_msg.sendMessage(security.getSocket());
+                else
+                {
+                    if(status==FileStatus::created)
+                        std::cout << "Folder created: " << path_to_watch <<std::endl;
+                    else std::cout <<"Folder modified: "<< path_to_watch<<std::endl;
+                    Message::message<MsgType> new_file_msg;
+                    new_file_msg.header.id = MsgType::NEW_FILE;
+                    std::string path_usr = path_to_watch + "/";
+                    new_file_msg<<path_usr;
+                    new_file_msg.sendMessage(security.getSocket());
                     break;
                 }
-                case FileStatus::erased:
-                    std::cout << "File erased: " << path_to_watch << '\n';
-                    break;
-                default:
-                    std::cout << "Error! Unknown file status.\n";
             }
-        });
+            case FileStatus::erased:
+            {
+                if(file) std::cout << "File erased: " << path_to_watch <<std::endl;
+                else std::cout <<"Folder erased: "<< path_to_watch<<std::endl;
+                Message::message<MsgType> new_file_msg;
+                new_file_msg.header.id = MsgType::DELETE;
+                std::string path_usr = path_to_watch + "/";
+                new_file_msg<<path_usr;
+                new_file_msg.sendMessage(security.getSocket());
+                break;
+            }
+
+
+
+            default:
+                std::cout << "Error! Unknown file status.\n";
+        }
+    });
 }
 
 void prepare_file(const std::string& path_to_watch ,std::vector<char>& body)
@@ -382,20 +490,6 @@ void menu()
     std::cout<<"#################MENU######################"<<std::endl;
     std::cout<<"###########################################"<<std::endl;
 }
-
-//todo
-void fill_set_errors()
-{
-    set_errors.insert("\a");
-    set_errors.insert("\b");
-    set_errors.insert("REGISTRAZIONE AVVENUTA\r\n");
-    set_errors.insert("CLIENT LOGGED\r\n");
-    set_errors.insert("CLIENT LOGOUT\r\n");
-    set_errors.insert("LOGOUT FALLITO\r\n");
-    set_errors.insert("FILE MANDATO CON SUCCESSO\r\n");
-    set_errors.insert("ERRORE, file non trovato o errore generico\r\n");
-}
-
 
 void start_new_connection(boost::asio::ip::tcp::socket& socket, boost::asio::ip::tcp::endpoint& endpoint)
 {

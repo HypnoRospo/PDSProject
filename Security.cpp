@@ -44,17 +44,25 @@ void Security::setNonce() const
 void Security::same_procedure(MsgType msgType,bool thread) const
 {
     //form
-    if(isLogged())
+    if(logged)
         return;
 
     std::cout <<"Inserire nome utente o exit per uscire: ";
     std::cin >> usr;
     if(usr=="exit")
     {
-        if(thread)
-        {
-            cv.notify_all();
-        }
+       if(thread)
+       {
+           std::unique_lock<std::mutex> lk(mutex);
+           cv.wait(lk, []{return ready;});
+
+           // Send data back to main()
+           processed = true;
+           // Manual unlocking is done before notifying, to avoid waking up
+           // the waiting thread only to block again (see notify_one for details)
+           lk.unlock();
+           cv.notify_one();
+       }
         return;
     }
     std::cout <<"Inserire password: ";
@@ -97,19 +105,11 @@ boost::asio::ip::tcp::socket &Security::getSocket() const {
     return socket;
 }
 
-bool Security::isLogged() const {
-    return logged;
-}
-
-void Security::setLogged(bool logged_){
-    Security::logged = logged_;
-}
-
 std::string &Security::getUsr() const {
     return usr;
 }
 
-std::string &Security::getPsw() const {
+std::string &Security::getPsw() const {  //change password feature
     return psw;
 }
 
@@ -145,9 +145,8 @@ std::string Security::calculate_checksum(std::ifstream &ifs) {
         {
             std::cerr << "Impossibile aprire il file '"<< std::endl;
         }
-        std::cout<<"Tempo impiegato per il calcolo del CRC: "<<(double)(clock() - tStart)/CLOCKS_PER_SEC;
-
-        std::cout << std::hex << std::uppercase << result.checksum() << std::endl;
+        std::cout<<"Tempo impiegato per il calcolo del CRC: "<<(double)(clock() - tStart)/CLOCKS_PER_SEC<<std::endl;
+        std::cout <<"Checksum: "<< std::hex << std::uppercase << result.checksum() << std::endl;
 
         std::stringstream stream;
         stream << std::hex << std::uppercase << result.checksum();
