@@ -9,19 +9,21 @@
 #include <fstream>
 #include "Security.h"
 #include "FileWatcher.h"
-
-void getSomeData_asyn(Security& security,std::vector<char>& vBuffer);
+#include <boost/asio/deadline_timer.hpp>
+#define SECONDS 30
+void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio::deadline_timer& timer);
 void start_new_connection(boost::asio::ip::tcp::socket& socket, boost::asio::ip::tcp::endpoint& endpoint);
 void file_watcher(Security const & security);
+void handler(const boost::system::error_code& error);
 std::mutex mutex;
 std::condition_variable cv;
 bool ready = false;
 bool processed = false;
 bool logged =false;
+bool response=true;
 std::thread fw_thread;
 boost::system::error_code ec;
 // Redefine this to change to processing buffer size
-
 void menu();
 void prepare_file(const std::string& path_to_watch ,std::vector<char>& body);
 int main(int argc, char** argv) {
@@ -43,6 +45,9 @@ int main(int argc, char** argv) {
         std::thread thrContext = std::thread([&] () {io_context.run();}); //start context in background
         boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::make_address(argv[1],ec),std::stoi(argv[2]));
         boost::asio::ip::tcp::socket  socket(io_context); //the context will deliver the implementation
+        // Construct a timer without setting an expiry time.
+        boost::asio::deadline_timer timer(io_context,boost::posix_time::seconds(SECONDS));
+        // Set an expiry time relative to now.
 
         std::string root_path("../client_users/");
         if(!boost::filesystem::exists(root_path)) {
@@ -59,7 +64,7 @@ int main(int argc, char** argv) {
             std::string usr;
             std::string psw;
             Security security(usr, psw, socket);
-            getSomeData_asyn(security,vBuffer);
+            getSomeData_asyn(security,vBuffer,timer);
             while(on)
             {
                 menu();
@@ -168,11 +173,28 @@ int main(int argc, char** argv) {
 }
 
 
-void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
+void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio::deadline_timer& timer)
 {
+
+        timer.async_wait(handler);
+
         security.getSocket().async_read_some(boost::asio::buffer(vBuffer.data(),vBuffer.size()),
                                [&](std::error_code ec,std::size_t length)
                                {
+
+                                   if (timer.expires_from_now(boost::posix_time::seconds(SECONDS)) > 0)
+                                   {
+                                       // We managed to cancel the timer. Start new asynchronous wait.
+                                       timer.async_wait(handler);
+                                       response=true;
+                                   }
+                                   else
+                                   {
+                                       // Too late, timer has already expired!
+                                       std::cout<<"Too late, timer has already expired!"<<std::endl;
+                                       response=false;
+                                   }
+
                                    if(!ec)
                                    {
                                        std::cout <<"\n\n Read " <<length << " bytes\n\n";
@@ -383,7 +405,7 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
                                            std::cout<<"Timeout scaduto, inserire scelta se necessario: "<<std::endl;
                                        }
 
-                                           getSomeData_asyn(security,vBuffer); // isn't a real recursive but a system watching of network data.
+                                           getSomeData_asyn(security,vBuffer,timer); // isn't a real recursive but a system watching of network data.
                                    }
                                    else std::cout<<ec.message()<<std::endl;
 
@@ -392,6 +414,23 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
         );
 }
 
+void handler(const boost::system::error_code& error)
+{
+    if (error!= boost::asio::error::operation_aborted)
+    {
+        // Timer was not cancelled, take necessary action.
+        std::cout<<"Nessuna risposta dopo "<<SECONDS<<" secondi"<<std::endl;
+        if(fw_thread.joinable())
+        {
+            fw_thread.join();
+        }
+        while(!response)
+        {
+
+        }
+
+    }
+}
 
 void file_watcher(Security const & security)
 {
