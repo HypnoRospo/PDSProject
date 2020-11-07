@@ -63,6 +63,18 @@ void Security::same_procedure(MsgType msgType,bool thread) const
            lk.unlock();
            cv.notify_one();
        }
+       else
+       {
+
+           std::unique_lock<std::mutex> lk(mutex);
+           cv.wait(lk, []{return !ready && !processed;});
+           // Send data back to main()
+           processed = true;
+           // Manual unlocking is done before notifying, to avoid waking up
+           // the waiting thread only to block again (see notify_one for details)
+           lk.unlock();
+           cv.notify_one();
+       }
         return;
     }
     std::cout <<"Inserire password: ";
