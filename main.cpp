@@ -369,10 +369,15 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer)
                                        {
                                            //mutex.unlock()
                                            //cv.notify_all();
-                                           if(!ready && !processed) // siamo in afk
-                                           {
-                                               logged=false; //todo da rivedere non worka sempre credo, domani
-                                           }
+                                               std::unique_lock<std::mutex> lk(mutex);
+                                               cv.wait(lk, []{return (!ready && !processed);}); // siamo in afk
+                                               // Send data back to main()
+                                               logged=false;
+                                               fw_thread.join();
+                                               // Manual unlocking is done before notifying, to avoid waking up
+                                               // the waiting thread only to block again (see notify_one for details)
+                                               lk.unlock();
+                                               cv.notify_one();
 
                                            menu();
                                            std::cout<<"Timeout scaduto, inserire scelta se necessario: "<<std::endl;

@@ -93,7 +93,7 @@
                 {
                     Message::message<MsgType> new_file_msg;
                     new_file_msg.header.id = MsgType::NEW_FILE;
-                    std::string path_usr = path_to_watch + "/";
+                    std::string path_usr = file.path().string() + "/";
                     new_file_msg<<path_usr;
                     new_file_msg.sendMessage(security.getSocket());
                 }
