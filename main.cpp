@@ -15,13 +15,14 @@
 void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio::deadline_timer& timer);
 void start_new_connection(boost::asio::ip::tcp::socket& socket, boost::asio::ip::tcp::endpoint& endpoint);
 void file_watcher(Security const & security);
-void handler(const boost::system::error_code& error,const Security& security);
+void handler(const boost::system::error_code& error);
 std::mutex mutex;
 std::condition_variable cv;
 bool ready = false;
 bool processed = false;
 bool logged =false;
-bool response=true;
+bool response=false;
+bool closed=false;
 std::thread fw_thread;
 boost::system::error_code ec;
 // Redefine this to change to processing buffer size
@@ -146,12 +147,6 @@ int main(int argc, char** argv) {
                 {
                     std::unique_lock<std::mutex> lk(mutex);
                     cv.wait(lk, []{return processed;});
-                    /*
-                    if(!logged)
-                    {
-                        fw_thread.join();
-                    }
-                     */
                     ready=false;
                     processed=false;
                 }
@@ -177,27 +172,27 @@ int main(int argc, char** argv) {
 void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio::deadline_timer& timer)
 {
     timer.async_wait([&] ( const boost::system::error_code& ec ) {
-        handler(ec,security);
+        handler(ec);
     });
 
         security.getSocket().async_read_some(boost::asio::buffer(vBuffer.data(),vBuffer.size()),
                                [&](std::error_code ec,std::size_t length)
                                {
+                                   response=true;
 
                                    if (timer.expires_from_now(boost::posix_time::seconds(SECONDS)) > 0)
                                    {
                                        // We managed to cancel the timer. Start new asynchronous wait.
-
                                        timer.async_wait([&] ( const boost::system::error_code& ec ) {
-                                           handler(ec,security);
+                                           handler(ec);
                                        });
-                                       response=true;
+
                                    }
                                    else
                                    {
                                        // Too late, timer has already expired!
-                                       std::cout<<"Too late, timer has already expired!"<<std::endl;
-                                       response=false;
+                                       std::cout<<"Timer gia' scattato in precedenza!\n"<<std::endl;
+
                                    }
 
                                    if(!ec)
@@ -412,7 +407,11 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio:
 
                                            getSomeData_asyn(security,vBuffer,timer); // isn't a real recursive but a system watching of network data.
                                    }
-                                   else std::cout<<ec.message()<<std::endl;
+                                   else
+                                   {
+                                       if(ec.message()=="End of file")
+                                       closed=true;
+                                   }
 
 
 
@@ -420,22 +419,31 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio:
         );
 }
 
-void handler(const boost::system::error_code& error,const Security& security)
+void handler(const boost::system::error_code& error)
 {
+    boost::asio::io_context io;
     if (error!= boost::asio::error::operation_aborted)
     {
         // Timer was not cancelled, take necessary action.
         std::cout<<"Nessuna risposta dopo "<<SECONDS<<" secondi"<<std::endl;
 
-        while(response)
+        //a lock is needed? i think not
+        response=false;
+
+       if (!response)
         {
           //finche resta qua , non risponde
           //controlla se il socket e' chiuso/
           //polling
-          std::cout<<"In attesa di una risposta dal server..."<<std::endl;
-          if(security.getSocket().is_open())
+            boost::asio::deadline_timer timer(io,boost::posix_time::seconds(5));
+            timer.expires_from_now(boost::posix_time::seconds(5));
+            timer.wait();
+
+            std::cout<<"In attesa di una risposta dal server..."<<std::endl;
+          if(closed)
           {
               std::cout<<"Chiusura programma, il server non e' attivo "<<std::endl;
+              logged=false;
               if(fw_thread.joinable())
               {
                   fw_thread.join();
@@ -443,8 +451,14 @@ void handler(const boost::system::error_code& error,const Security& security)
               exit(EXIT_FAILURE);
           }
         }
+       else
+       {
+           std::cout<<"Risposta dal server ricevuta, continuare: "<<std::endl;
+           menu();
+       }
+
         //qua dentro il server ha gia risposto e non e' morto
-        //niente i messaggi sono in coda
+        //niente, i messaggi sono in coda
     }
 }
 
