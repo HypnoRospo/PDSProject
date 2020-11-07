@@ -5,6 +5,7 @@
 #include <condition_variable>
 #include <boost/algorithm/string/find.hpp>
 #include <boost/filesystem.hpp>
+#include <boost/bind/bind.hpp>
 #include <set>
 #include <fstream>
 #include "Security.h"
@@ -14,7 +15,7 @@
 void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio::deadline_timer& timer);
 void start_new_connection(boost::asio::ip::tcp::socket& socket, boost::asio::ip::tcp::endpoint& endpoint);
 void file_watcher(Security const & security);
-void handler(const boost::system::error_code& error);
+void handler(const boost::system::error_code& error,const Security& security);
 std::mutex mutex;
 std::condition_variable cv;
 bool ready = false;
@@ -175,8 +176,9 @@ int main(int argc, char** argv) {
 
 void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio::deadline_timer& timer)
 {
-
-        timer.async_wait(handler);
+    timer.async_wait([&] ( const boost::system::error_code& ec ) {
+        handler(ec,security);
+    });
 
         security.getSocket().async_read_some(boost::asio::buffer(vBuffer.data(),vBuffer.size()),
                                [&](std::error_code ec,std::size_t length)
@@ -185,7 +187,10 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio:
                                    if (timer.expires_from_now(boost::posix_time::seconds(SECONDS)) > 0)
                                    {
                                        // We managed to cancel the timer. Start new asynchronous wait.
-                                       timer.async_wait(handler);
+
+                                       timer.async_wait([&] ( const boost::system::error_code& ec ) {
+                                           handler(ec,security);
+                                       });
                                        response=true;
                                    }
                                    else
@@ -410,25 +415,36 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio:
                                    else std::cout<<ec.message()<<std::endl;
 
 
+
                                }
         );
 }
 
-void handler(const boost::system::error_code& error)
+void handler(const boost::system::error_code& error,const Security& security)
 {
     if (error!= boost::asio::error::operation_aborted)
     {
         // Timer was not cancelled, take necessary action.
         std::cout<<"Nessuna risposta dopo "<<SECONDS<<" secondi"<<std::endl;
-        if(fw_thread.joinable())
-        {
-            fw_thread.join();
-        }
-        while(!response)
-        {
 
+        while(response)
+        {
+          //finche resta qua , non risponde
+          //controlla se il socket e' chiuso/
+          //polling
+          std::cout<<"In attesa di una risposta dal server..."<<std::endl;
+          if(security.getSocket().is_open())
+          {
+              std::cout<<"Chiusura programma, il server non e' attivo "<<std::endl;
+              if(fw_thread.joinable())
+              {
+                  fw_thread.join();
+              }
+              exit(EXIT_FAILURE);
+          }
         }
-
+        //qua dentro il server ha gia risposto e non e' morto
+        //niente i messaggi sono in coda
     }
 }
 
