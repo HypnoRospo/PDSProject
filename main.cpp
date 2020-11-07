@@ -11,7 +11,7 @@
 #include "Security.h"
 #include "FileWatcher.h"
 #include <boost/asio/deadline_timer.hpp>
-#define SECONDS 30
+#define SECONDS 20
 void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio::deadline_timer& timer);
 void start_new_connection(boost::asio::ip::tcp::socket& socket, boost::asio::ip::tcp::endpoint& endpoint);
 void file_watcher(Security const & security);
@@ -421,11 +421,10 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio:
 
 void handler(const boost::system::error_code& error)
 {
-    boost::asio::io_context io;
     if (error!= boost::asio::error::operation_aborted)
     {
         // Timer was not cancelled, take necessary action.
-        std::cout<<"Nessuna risposta dopo "<<SECONDS<<" secondi"<<std::endl;
+        std::cout<<"\n\n\nNessuna risposta dopo "<<SECONDS<<" secondi"<<std::endl;
 
         //a lock is needed? i think not
         response=false;
@@ -434,12 +433,8 @@ void handler(const boost::system::error_code& error)
         {
           //finche resta qua , non risponde
           //controlla se il socket e' chiuso/
-          //polling
-            boost::asio::deadline_timer timer(io,boost::posix_time::seconds(5));
-            timer.expires_from_now(boost::posix_time::seconds(5));
-            timer.wait();
 
-            std::cout<<"In attesa di una risposta dal server..."<<std::endl;
+            std::cout<<"In attesa di una risposta dal server...\n\n\n"<<std::endl;
           if(closed)
           {
               std::cout<<"Chiusura programma, il server non e' attivo "<<std::endl;
@@ -450,6 +445,8 @@ void handler(const boost::system::error_code& error)
               }
               exit(EXIT_FAILURE);
           }
+          menu();
+          std::cout<<"Inserire input per provare a contattare il server: "<<std::endl;
         }
        else
        {
