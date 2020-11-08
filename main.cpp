@@ -11,7 +11,7 @@
 #include "Security.h"
 #include "FileWatcher.h"
 #include <boost/asio/deadline_timer.hpp>
-#define SECONDS 20
+#define SECONDS 15
 void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio::deadline_timer& timer);
 void start_new_connection(boost::asio::ip::tcp::socket& socket, boost::asio::ip::tcp::endpoint& endpoint);
 void file_watcher(Security const & security);
@@ -24,6 +24,7 @@ bool logged =false;
 bool response=false;
 bool closed=false;
 std::thread fw_thread;
+std::thread handler_thread;
 boost::system::error_code ec;
 // Redefine this to change to processing buffer size
 void menu();
@@ -66,6 +67,10 @@ int main(int argc, char** argv) {
             std::string usr;
             std::string psw;
             Security security(usr, psw, socket);
+            timer.async_wait([&] ( const boost::system::error_code& ec ) {
+                handler_thread = std::thread(handler,ec);
+                handler_thread.detach();
+            });
             getSomeData_asyn(security,vBuffer,timer);
             while(on)
             {
@@ -171,29 +176,19 @@ int main(int argc, char** argv) {
 
 void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio::deadline_timer& timer)
 {
-    timer.async_wait([&] ( const boost::system::error_code& ec ) {
-        handler(ec);
-    });
-
         security.getSocket().async_read_some(boost::asio::buffer(vBuffer.data(),vBuffer.size()),
                                [&](std::error_code ec,std::size_t length)
                                {
                                    response=true;
 
-                                   if (timer.expires_from_now(boost::posix_time::seconds(SECONDS)) > 0)
-                                   {
+                                   timer.expires_from_now(boost::posix_time::seconds(SECONDS));
+
                                        // We managed to cancel the timer. Start new asynchronous wait.
                                        timer.async_wait([&] ( const boost::system::error_code& ec ) {
-                                           handler(ec);
+                                           handler_thread = std::thread(handler,ec);
+                                           handler_thread.detach();
                                        });
 
-                                   }
-                                   else
-                                   {
-                                       // Too late, timer has already expired!
-                                       std::cout<<"Timer gia' scattato in precedenza!\n"<<std::endl;
-
-                                   }
 
                                    if(!ec)
                                    {
@@ -421,6 +416,10 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio:
 
 void handler(const boost::system::error_code& error)
 {
+    boost::asio::io_context io;
+    boost::asio::deadline_timer timer(io);
+
+    unsigned int counter=0;
     if (error!= boost::asio::error::operation_aborted)
     {
         // Timer was not cancelled, take necessary action.
@@ -429,12 +428,12 @@ void handler(const boost::system::error_code& error)
         //a lock is needed? i think not
         response=false;
 
-       if (!response)
+       while(!response)
         {
           //finche resta qua , non risponde
           //controlla se il socket e' chiuso/
 
-            std::cout<<"In attesa di una risposta dal server...\n\n\n"<<std::endl;
+
           if(closed)
           {
               std::cout<<"Chiusura programma, il server non e' attivo "<<std::endl;
@@ -445,17 +444,37 @@ void handler(const boost::system::error_code& error)
               }
               exit(EXIT_FAILURE);
           }
-          menu();
-          std::cout<<"Inserire input per provare a contattare il server: "<<std::endl;
+
+          /*
+          if(counter==3)
+          {
+              logged=false;
+              if(fw_thread.joinable())
+              {
+                  fw_thread.join();
+              }
+              std::cout<<"Chiusura programma, a seguito di "<<counter<<" tentativi, il server non ha risposto"<<std::endl;
+              exit(EXIT_FAILURE);
+          }
+           */
+            std::cout<<"In attesa di una risposta dal server...\n\n\n"<<std::endl;
+
+            menu();
+            std::cout<<"Inserire input per provare a contattare il server: "<<std::endl;
+
+// Set an expiry time relative to now.
+           timer.expires_from_now(boost::posix_time::seconds(SECONDS/2));
+
+// Wait for the timer to expire.
+           timer.wait();
+           counter++;
+           std::cout<<"Tentativo fallito numero "<<counter<<"\n\n"<<std::endl;
         }
-       else
-       {
+           //qua dentro il server ha gia risposto e non e' morto
+           //niente, i messaggi sono in coda
            std::cout<<"Risposta dal server ricevuta, continuare: "<<std::endl;
            menu();
-       }
 
-        //qua dentro il server ha gia risposto e non e' morto
-        //niente, i messaggi sono in coda
     }
 }
 

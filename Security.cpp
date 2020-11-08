@@ -46,7 +46,7 @@ void Security::same_procedure(MsgType msgType,bool thread) const
     //form
     if(logged)
         return;
-
+//todo user & password check with for(;;) loop , lenght and propers characters
     std::cout <<"Inserire nome utente o exit per uscire: ";
     std::cin >> usr;
     if(usr=="exit")
