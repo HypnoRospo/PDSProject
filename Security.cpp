@@ -83,7 +83,7 @@ for(;;) {
     else
         std::cout<<"Nome utente non disponibile, riprovare."<<std::endl;
 
-}1
+}
     for(;;){
         std::cout <<"Inserire password: ";
         std::cin >> psw ;

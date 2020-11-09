@@ -11,7 +11,7 @@
 #include "Security.h"
 #include "FileWatcher.h"
 #include <boost/asio/deadline_timer.hpp>
-#define SECONDS 15
+#define SECONDS 60
 void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio::deadline_timer& timer);
 void start_new_connection(boost::asio::ip::tcp::socket& socket, boost::asio::ip::tcp::endpoint& endpoint);
 void file_watcher(Security const & security);
@@ -244,6 +244,24 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio:
                                                boost::filesystem::create_directory(security.getUsr());
                                            }
                                            fw_thread = std::thread(file_watcher,security);
+                                       }
+
+                                       std::string get_file_ok("+OK\r\n");
+                                       if(search.find(get_file_ok)!=std::string::npos)
+                                       {
+                                           /* politica di ricezione file da rivedere ma okay
+                                           boost::filesystem::path target =security.getUsr();
+                                           std::ofstream  os(target,std::ios::out | std::ios::binary | std::ios::trunc);
+                                           if (os.is_open())
+                                           {
+                                               os<<body;
+                                               os.close();
+                                           }
+                                           else {
+                                               std::cout << "Unable to open file";
+                                           }
+
+                                            */
                                        }
 
                                        std::string login("CLIENT LOGGED\r\n");
