@@ -17,6 +17,7 @@ void start_new_connection(boost::asio::ip::tcp::socket& socket, boost::asio::ip:
 void file_watcher(Security const & security);
 void handler(const boost::system::error_code& error);
 std::mutex mutex;
+std::mutex mutex_response;
 std::condition_variable cv;
 bool ready = false;
 bool processed = false;
@@ -179,7 +180,10 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio:
         security.getSocket().async_read_some(boost::asio::buffer(vBuffer.data(),vBuffer.size()),
                                [&](std::error_code ec,std::size_t length)
                                {
+
+                                   std::unique_lock<std::mutex> lk_r(mutex_response);
                                    response=true;
+                                   lk_r.unlock();
 
                                    timer.expires_from_now(boost::posix_time::seconds(SECONDS));
 
@@ -425,10 +429,15 @@ void handler(const boost::system::error_code& error)
         // Timer was not cancelled, take necessary action.
         std::cout<<"\n\n\nNessuna risposta dopo "<<SECONDS<<" secondi"<<std::endl;
 
-        //a lock is needed? i think not
+        std::unique_lock<std::mutex> lk_r(mutex_response);
         response=false;
+        lk_r.unlock();
+        // Manual unlocking is done before notifying, to avoid waking up
+        // the waiting thread only to block again (see notify_one for details)
 
-       while(!response)
+        std::cout<<"In attesa di una risposta dal server...\n\n\n"<<std::endl;
+
+        while(!response)
         {
           //finche resta qua , non risponde
           //controlla se il socket e' chiuso/
@@ -456,14 +465,14 @@ void handler(const boost::system::error_code& error)
               std::cout<<"Chiusura programma, a seguito di "<<counter<<" tentativi, il server non ha risposto"<<std::endl;
               exit(EXIT_FAILURE);
           }
-           */
+
             std::cout<<"In attesa di una risposta dal server...\n\n\n"<<std::endl;
 
             menu();
             std::cout<<"Inserire input per provare a contattare il server: "<<std::endl;
 
 // Set an expiry time relative to now.
-           timer.expires_from_now(boost::posix_time::seconds(SECONDS/2));
+           timer.expires_from_now(boost::posix_time::seconds(1));
 
 // Wait for the timer to expire.
            timer.wait();
@@ -475,7 +484,14 @@ void handler(const boost::system::error_code& error)
            std::cout<<"Risposta dal server ricevuta, continuare: "<<std::endl;
            menu();
 
+           */
     }
+        //qua dentro il server ha gia risposto e non e' morto
+        //niente, i messaggi sono in coda
+        std::cout<<"Risposta dal server ricevuta, continuare: "<<std::endl;
+        //menu();
+}
+
 }
 
 void file_watcher(Security const & security)

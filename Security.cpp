@@ -8,6 +8,7 @@
 #include <sodium/crypto_secretbox.h>
 #include <fstream>
 #include <boost/crc.hpp>  // for boost::crc_32_type
+#include <boost/algorithm/string.hpp>
 
 unsigned char key[crypto_secretbox_KEYBYTES] ={"pds_project_key"};
 unsigned char nonce[crypto_secretbox_NONCEBYTES]={};
@@ -47,39 +48,56 @@ void Security::same_procedure(MsgType msgType,bool thread) const
     if(logged)
         return;
 //todo user & password check with for(;;) loop , lenght and propers characters
-    std::cout <<"Inserire nome utente o exit per uscire: ";
+for(;;) {
+    std::cout << "Inserire nome utente o exit per uscire: ";
     std::cin >> usr;
-    if(usr=="exit")
-    {
-       if(thread)
-       {
-           std::unique_lock<std::mutex> lk(mutex);
-           cv.wait(lk, []{return ready;});
+    if (usr == "exit") {
+        if (thread) {
+            std::unique_lock<std::mutex> lk(mutex);
+            cv.wait(lk, [] { return ready; });
 
-           // Send data back to main()
-           processed = true;
-           // Manual unlocking is done before notifying, to avoid waking up
-           // the waiting thread only to block again (see notify_one for details)
-           lk.unlock();
-           cv.notify_one();
-       }
-       else
-       {
+            // Send data back to main()
+            processed = true;
+            // Manual unlocking is done before notifying, to avoid waking up
+            // the waiting thread only to block again (see notify_one for details)
+            lk.unlock();
+            cv.notify_one();
+        } else {
 
-           std::unique_lock<std::mutex> lk(mutex);
-           cv.wait(lk, []{return !ready && !processed;});
-           // Send data back to main()
-           processed = true;
-           // Manual unlocking is done before notifying, to avoid waking up
-           // the waiting thread only to block again (see notify_one for details)
-           lk.unlock();
-           cv.notify_one();
-       }
+            std::unique_lock<std::mutex> lk(mutex);
+            cv.wait(lk, [] { return !ready && !processed; });
+            // Send data back to main()
+            processed = true;
+            // Manual unlocking is done before notifying, to avoid waking up
+            // the waiting thread only to block again (see notify_one for details)
+            lk.unlock();
+            cv.notify_one();
+        }
         return;
     }
-    std::cout <<"Inserire password: ";
-    std::cin >> psw ;
+    boost::trim(usr);
+    if(usr!="admin" && usr!="root" && usr!=" " && usr!="/")
+    {
+        break;
+    }
+    else
+        std::cout<<"Nome utente non disponibile, riprovare."<<std::endl;
+
+}
+    for(;;){
+        std::cout <<"Inserire password: ";
+        std::cin >> psw ;
+        boost::trim(psw);
+        if(psw.size()<8) //altre politiche disponibili
+        {
+            std::cout<<"Password too short, repeat a stronger password"<<std::endl;
+
+        }
+        else break;
+    }
+
     //fine form
+
     std::vector<unsigned char> cipher_vect;
     Message::message<MsgType> mex;
     mex.set_id(msgType);
