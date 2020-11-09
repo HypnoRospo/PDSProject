@@ -83,14 +83,14 @@ for(;;) {
     else
         std::cout<<"Nome utente non disponibile, riprovare."<<std::endl;
 
-}
+}1
     for(;;){
         std::cout <<"Inserire password: ";
         std::cin >> psw ;
         boost::trim(psw);
         if(psw.size()<8) //altre politiche disponibili
         {
-            std::cout<<"Password too short, repeat a stronger password"<<std::endl;
+            std::cout<<"Password troppo corta, inserire una nuova password"<<std::endl;
 
         }
         else break;
