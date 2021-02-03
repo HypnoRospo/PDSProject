@@ -51,21 +51,28 @@
                 }
 
                 // Check if a file was created or modified
-                for(auto &file : std::filesystem::recursive_directory_iterator(path_to_watch)) {
-                    auto current_file_last_write_time = std::filesystem::last_write_time(file);
+                try
+                {
+                    for(auto &file : std::filesystem::recursive_directory_iterator(path_to_watch)) {
+                        auto current_file_last_write_time = std::filesystem::last_write_time(file);
 
-                    // File creation
-                    if(!contains(file.path().string())) {
-                        paths_[file.path().string()] = current_file_last_write_time;
-                        action(file.path().string(), FileStatus::created);
-                        // File modification
-                    } else {
-                        if(paths_[file.path().string()] != current_file_last_write_time) {
-                            //logica qui per capire se e' in realta' rename
+                        // File creation
+                        if(!contains(file.path().string())) {
                             paths_[file.path().string()] = current_file_last_write_time;
-                            action(file.path().string(), FileStatus::modified);
+                            action(file.path().string(), FileStatus::created);
+                            // File modification
+                        } else {
+                            if(paths_[file.path().string()] != current_file_last_write_time) {
+                                //logica qui per capire se e' in realta' rename
+                                paths_[file.path().string()] = current_file_last_write_time;
+                                action(file.path().string(), FileStatus::modified);
+                            }
                         }
                     }
+                }
+                catch(std::filesystem::filesystem_error &fe)
+                {
+                    throw fe;
                 }
             }
         }

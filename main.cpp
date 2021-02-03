@@ -6,11 +6,12 @@
 #include <boost/algorithm/string/find.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/bind/bind.hpp>
-#include <set>
 #include <fstream>
+#include <boost/asio/deadline_timer.hpp>
+#include <boost/asio/read.hpp>
 #include "Security.h"
 #include "FileWatcher.h"
-#include <boost/asio/deadline_timer.hpp>
+
 #define SECONDS 60
 void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio::deadline_timer& timer);
 void start_new_connection(boost::asio::ip::tcp::socket& socket, boost::asio::ip::tcp::endpoint& endpoint);
@@ -24,6 +25,7 @@ bool processed = false;
 bool logged =false;
 bool response=false;
 bool closed=false;
+bool on=true;
 std::thread fw_thread;
 std::thread handler_thread;
 boost::system::error_code ec;
@@ -62,7 +64,6 @@ int main(int argc, char** argv) {
 
         if(socket.is_open())
         {
-            bool on=true;
             unsigned int scelta;
             std::vector<char> vBuffer(1024); //big buffer , regulate the speed and costs
             std::string usr;
@@ -78,6 +79,11 @@ int main(int argc, char** argv) {
                 menu();
                     std::cout <<"Inserire scelta: ";
                     std::cin >> scelta;
+                if(!on)
+                {
+                    std::cout<<"Trovata eccezione, chiusura del programma." <<std::endl;
+                    continue;
+                }
                 switch(scelta)
                 {
                     case 1:
@@ -247,18 +253,24 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio:
                                        }
 
                                        std::string get_file_ok("+OK\r\n");
-                                       if(search.find(get_file_ok)!=std::string::npos)
+                                       if(size_t pos=search.find(get_file_ok)!=std::string::npos)
                                        {
-                                           /* politica di ricezione file da rivedere ma okay
-                                           boost::filesystem::path target =security.getUsr();
-                                           std::ofstream  os(target,std::ios::out | std::ios::binary | std::ios::trunc);
-                                           if (os.is_open())
+                                           /*
+                                           if(search!=get_file_ok)
                                            {
-                                               os<<body;
-                                               os.close();
-                                           }
-                                           else {
-                                               std::cout << "Unable to open file";
+                                               size_t pos_= search.find("\r\n",search.find("\r\n")+1);
+                                               std::string file_path=search.substr(pos+4,pos_-(pos+4));
+                                               std::string file=search.substr(pos_,search.size());
+                                               boost::filesystem::path target =boost::filesystem::current_path().string()+"/"+file_path;
+                                               std::ofstream  os(target,std::ios::out | std::ios::binary | std::ios::app);
+                                               if (os.is_open())
+                                               {
+                                                   os<<file;
+                                                   os.close();
+                                               }
+                                               else {
+                                                   std::cout << "Unable to open file";
+                                               }
                                            }
 
                                             */
@@ -436,6 +448,8 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio:
         );
 }
 
+/* rivedere questa parte di codice assolutamente */
+
 void handler(const boost::system::error_code& error)
 {
     boost::asio::io_context io;
@@ -520,62 +534,76 @@ void file_watcher(Security const & security)
 
     fw.sync(security);
 
-    fw.start([&](const std::string &path_to_watch,FileStatus status)-> void {
-        bool file=std::filesystem::is_regular_file(std::filesystem::path(path_to_watch));
-        bool folder=std::filesystem::is_directory(std::filesystem::path(path_to_watch));
-        // Process only regular files, all other file types are ignored
-        if(!file && !folder && status != FileStatus::erased)
-        {
+    try
+    {
+        fw.start([&](const std::string &path_to_watch,FileStatus status)-> void {
+
+            bool file=std::filesystem::is_regular_file(std::filesystem::path(path_to_watch));
+            bool folder=std::filesystem::is_directory(std::filesystem::path(path_to_watch));
+            // Process only regular files, all other file types are ignored
+            if(!file && !folder && status != FileStatus::erased)
+            {
                 return;
-        }
-        switch(status) {
-            case FileStatus::created:
-            case FileStatus::modified:{
-                if(!folder)
-                {
-                    if(status==FileStatus::created)
-                    std::cout << "File created: " << path_to_watch <<std::endl;
-                    else std::cout <<"File modified: "<< path_to_watch<<std::endl;
-                    Message::message<MsgType> new_file_msg;
-                    new_file_msg.header.id = MsgType::NEW_FILE;
-                    std::string path_usr = path_to_watch + "\r\n";
-                    std::vector<char> body(path_usr.begin(), path_usr.end());
-                    prepare_file(path_to_watch,body);
-                    new_file_msg << body;
-                    new_file_msg.sendMessage(security.getSocket());
-                    break;
+            }
+            switch(status) {
+                case FileStatus::created:
+                case FileStatus::modified:{
+                    if(!folder)
+                    {
+                        if(status==FileStatus::created)
+                            std::cout << "File created: " << path_to_watch <<std::endl;
+                        else std::cout <<"File modified: "<< path_to_watch<<std::endl;
+                        Message::message<MsgType> new_file_msg;
+                        new_file_msg.header.id = MsgType::NEW_FILE;
+                        std::string path_usr = path_to_watch + "\r\n";
+                        std::vector<char> body(path_usr.begin(), path_usr.end());
+                        prepare_file(path_to_watch,body);
+                        //cifrare il body
+                        new_file_msg << body;
+                        new_file_msg.sendMessage(security.getSocket());
+                        break;
+                    }
+                    else
+                    {
+                        if(status==FileStatus::created)
+                            std::cout << "Folder created: " << path_to_watch <<std::endl;
+                        else std::cout <<"Folder modified: "<< path_to_watch<<std::endl;
+                        Message::message<MsgType> new_file_msg;
+                        new_file_msg.header.id = MsgType::NEW_FILE;
+                        std::string path_usr = path_to_watch + "/";
+                        new_file_msg<<path_usr;
+                        new_file_msg.sendMessage(security.getSocket());
+                        break;
+                    }
                 }
-                else
+                case FileStatus::erased:
                 {
-                    if(status==FileStatus::created)
-                        std::cout << "Folder created: " << path_to_watch <<std::endl;
-                    else std::cout <<"Folder modified: "<< path_to_watch<<std::endl;
+                    //non riesce a capire se e' un file o direttorio, per file senza estensione
+                    // ..nessun problema pratico almeno credo
+                    if(!folder) std::cout << "File erased: " << path_to_watch <<std::endl;
+                    else std::cout <<"Folder erased: "<< path_to_watch<<std::endl;
                     Message::message<MsgType> new_file_msg;
-                    new_file_msg.header.id = MsgType::NEW_FILE;
-                    std::string path_usr = path_to_watch + "/";
+                    new_file_msg.header.id = MsgType::DELETE;
+                    std::string path_usr = path_to_watch + "\r\n";
                     new_file_msg<<path_usr;
                     new_file_msg.sendMessage(security.getSocket());
                     break;
                 }
-            }
-            case FileStatus::erased:
-            {
-                //non riesce a capire se e' un file o direttorio, per file senza estensione
-                // ..nessun problema pratico almeno credo
-                if(!folder) std::cout << "File erased: " << path_to_watch <<std::endl;
-                else std::cout <<"Folder erased: "<< path_to_watch<<std::endl;
-                Message::message<MsgType> new_file_msg;
-                new_file_msg.header.id = MsgType::DELETE;
-                std::string path_usr = path_to_watch + "\r\n";
-                new_file_msg<<path_usr;
-                new_file_msg.sendMessage(security.getSocket());
-                break;
-            }
 
-            default:
-                std::cout << "Error! Unknown file status.\n";
-        }
-    });
+                default:
+                    std::cout << "Error! Unknown file status.\n";
+            }
+        });
+    }
+    catch(std::filesystem::filesystem_error &fe)
+    {
+        on=false;
+        logged=false;
+        std::cout<<"\nE' stato rilevato un filesystem error."<<std::endl;
+        std::cout<<"Premere qualsiasi tasto per terminare il programma."<<std::endl;
+        return;
+    }
+
 }
 
 void prepare_file(const std::string& path_to_watch ,std::vector<char>& body)
