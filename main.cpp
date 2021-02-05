@@ -262,11 +262,13 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio:
                                          {
                                             if(search.size()>=get_file_ok.size()+4)
                                             {
-                                                std::string str2 = search.substr (5,4);
-                                                size_t pos_= search.find("\r\n",search.find("\r\n")+4);
-                                                std::string file_path=search.substr(pos+9,pos_-(pos+9));
+                                                //std::string str2 = search.substr (5,4);
+                                                size_t pos_= search.find("\r\n",search.find("\r\n")+1);
+                                                std::string file_path=search.substr(pos+4,pos_-(pos+4));
+                                                std::string str_dim=search.substr(5+file_path.size()+2,4);
+                                                //gli offset 5 e 2 sono considerati per la lungezza del messaggio ok e del deliminatore successivo di filepath
                                                 //converto stringa in uint 32
-                                                uint32_t dimensione_download= htonl(*(uint32_t*)str2.c_str());
+                                                uint32_t dimensione_download= htonl(*(uint32_t*)str_dim.c_str());
                                                 download=true;
                                             }
                                          }
