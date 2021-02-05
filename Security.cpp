@@ -189,13 +189,6 @@ std::string Security::calculate_checksum(std::ifstream &ifs) {
         return e.what();
         /* VA GESTITA LA RETURN ADATTA */
     }
-    catch ( ... )
-    {
-        std::cerr << "Found an unknown exception." << std::endl;
-        return "Errore sconosciuto sul calcolo CRC";
-        /* VA GESTITA LA RETURN ADATTA */
-
-    }
 
 }
 

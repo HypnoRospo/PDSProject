@@ -13,6 +13,7 @@
 #include "FileWatcher.h"
 
 #define SECONDS 60
+#define N 1024
 void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio::deadline_timer& timer);
 void start_new_connection(boost::asio::ip::tcp::socket& socket, boost::asio::ip::tcp::endpoint& endpoint);
 void file_watcher(Security const & security);
@@ -26,6 +27,8 @@ bool logged =false;
 bool response=false;
 bool closed=false;
 bool on=true;
+bool download=false;
+uint32_t dimensione_download;
 std::thread fw_thread;
 std::thread handler_thread;
 boost::system::error_code ec;
@@ -65,7 +68,7 @@ int main(int argc, char** argv) {
         if(socket.is_open())
         {
             unsigned int scelta;
-            std::vector<char> vBuffer(1024); //big buffer , regulate the speed and costs
+            std::vector<char> vBuffer(N); //big buffer , regulate the speed and costs
             std::string usr;
             std::string psw;
             Security security(usr, psw, socket);
@@ -255,25 +258,36 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio:
                                        std::string get_file_ok("+OK\r\n");
                                        if(size_t pos=search.find(get_file_ok)!=std::string::npos)
                                        {
-                                           /*
-                                           if(search!=get_file_ok)
-                                           {
-                                               size_t pos_= search.find("\r\n",search.find("\r\n")+1);
-                                               std::string file_path=search.substr(pos+4,pos_-(pos+4));
-                                               std::string file=search.substr(pos_,search.size());
-                                               boost::filesystem::path target =boost::filesystem::current_path().string()+"/"+file_path;
-                                               std::ofstream  os(target,std::ios::out | std::ios::binary | std::ios::app);
-                                               if (os.is_open())
-                                               {
-                                                   os<<file;
-                                                   os.close();
-                                               }
-                                               else {
-                                                   std::cout << "Unable to open file";
-                                               }
-                                           }
+                                         if(!download)
+                                         {
+                                            if(search.size()>=get_file_ok.size()+4)
+                                            {
+                                                std::string str2 = search.substr (5,4);
+                                                size_t pos_= search.find("\r\n",search.find("\r\n")+4);
+                                                std::string file_path=search.substr(pos+9,pos_-(pos+9));
+                                                //converto stringa in uint 32
+                                                uint32_t dimensione_download= htonl(*(uint32_t*)str2.c_str());
+                                                download=true;
+                                            }
+                                         }
+                                         else
+                                         {
+                                             if(dimensione_download> N)
+                                             {
+                                                     //se il file e' grande
+                                                     //pure controllare che il buffer e' pieno
+                                                     // schiaffi 1024 nello stream e metti dimensione download = dimensione precedente - 1024
+                                             }
+                                             else
+                                             {
+                                                 std::string str3 = search.substr(9,search.size()-10);
+                                                 if(str3.size()>=dimensione_download)
+                                                 {
+                                                     //scrivo il file interamente.
+                                                 }
+                                             }
+                                         }
 
-                                            */
                                        }
 
                                        std::string login("CLIENT LOGGED\r\n");
