@@ -29,6 +29,9 @@ bool closed=false;
 bool on=true;
 bool download=false;
 uint32_t dimensione_download;
+std::string file_path;
+std::string file_name;
+unsigned int downloaded;
 std::thread fw_thread;
 std::thread handler_thread;
 boost::system::error_code ec;
@@ -219,7 +222,7 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio:
                                        std::string search(vBuffer.begin(),vBuffer.begin()+length);
 
 
-                                       if ( search.find('\a')!=std::string::npos)
+                                       if ( search.find('\a')!=std::string::npos) //buggato se mandi file
                                        {
                                            std::cout << "Utente gia' presente nel sistema, inserire un diverso username" <<std::endl;
                                            security.same_procedure(MsgType::REGISTER,true);
@@ -255,42 +258,90 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio:
                                            fw_thread = std::thread(file_watcher,security);
                                        }
 
-                                       std::string get_file_ok("+OK\r\n");
-                                       if(size_t pos=search.find(get_file_ok)!=std::string::npos)
-                                       {
-                                         if(!download)
+
+                                       if (!download && downloaded == 0) {
+                                           std::string get_file_ok("+OK\r\n");
+                                           size_t pos = search.find(get_file_ok);
+                                           if (pos != std::string::npos) {
+                                               size_t pos_ = search.find("\r\n", pos + 5);
+                                               if (pos_ != std::string::npos && pos_ + 5 + file_path.size() + 2 <= search.size()) {
+                                                   std::string str_dim = search.substr(pos_ + 2, search.find_first_of("\r\n",pos_+2)-(pos_+2));
+                                                   int how_many=str_dim.size();
+                                                   //converto stringa in uint 32
+                                                   dimensione_download = std::stoi(str_dim);
+                                                   download = true;
+                                                   downloaded = 0;
+                                                   if (!boost::filesystem::exists(
+                                                           boost::filesystem::current_path().string() + "/" +
+                                                           security.getUsr() + "/Download")) {
+                                                       boost::filesystem::create_directories(
+                                                               boost::filesystem::current_path().string() + "/" +
+                                                               security.getUsr() + "/Download");
+                                                   }
+                                                   file_name = file_path;
+                                                   while ((pos = file_name.find('/')) != std::string::npos) {
+                                                       file_name.erase(0, pos + 1);
+                                                   }
+                                                   boost::filesystem::path target =
+                                                           boost::filesystem::current_path().string() + "/" +
+                                                           security.getUsr() + "/Download/" + file_name;
+
+                                                   std::string file_part_tmp = search.substr(
+                                                           pos_ + 2 + how_many + 2 + downloaded,
+                                                           dimensione_download - downloaded);
+
+                                                   std::ofstream os(target,
+                                                                    std::ios::out | std::ios::binary | std::ios::trunc);
+                                                   if (os.is_open()) {
+                                                       os << file_part_tmp;
+                                                       os.close();
+                                                       downloaded = file_part_tmp.size();
+                                                       dimensione_download -= downloaded;
+                                                       if (dimensione_download == 0) {
+                                                           download = false;
+                                                           downloaded=0;
+                                                           std::cout
+                                                                   << "\nDownload del file eseguito con successo, controllare nella propria cartella locale Download."
+                                                                   << std::endl;
+                                                       }
+                                                   } else {
+                                                       std::cout << "Unable to open file";
+                                                   }
+                                               }
+                                           }
+                                       }
+                                       else
                                          {
-                                            if(search.size()>=get_file_ok.size()+4)
-                                            {
-                                                //std::string str2 = search.substr (5,4);
-                                                size_t pos_= search.find("\r\n",search.find("\r\n")+1);
-                                                std::string file_path=search.substr(pos+4,pos_-(pos+4));
-                                                std::string str_dim=search.substr(5+file_path.size()+2,4);
-                                                //gli offset 5 e 2 sono considerati per la lungezza del messaggio ok e del deliminatore successivo di filepath
-                                                //converto stringa in uint 32
-                                                uint32_t dimensione_download= htonl(*(uint32_t*)str_dim.c_str());
-                                                download=true;
-                                            }
-                                         }
-                                         else
-                                         {
+                                             std::string file_part_tmp;
                                              if(dimensione_download> N)
                                              {
-                                                     //se il file e' grande
-                                                     //pure controllare che il buffer e' pieno
-                                                     // schiaffi 1024 nello stream e metti dimensione download = dimensione precedente - 1024
+                                                 file_part_tmp=search;
                                              }
                                              else
+                                              file_part_tmp=search.substr(0,dimensione_download);
+
+                                             boost::filesystem::path target =boost::filesystem::current_path().string()+"/"+security.getUsr()+"/Download/"+file_name;
+
+                                             std::ofstream  os(target,std::ios::out | std::ios::binary | std::ios::app);
+                                             if (os.is_open())
                                              {
-                                                 std::string str3 = search.substr(9,search.size()-10);
-                                                 if(str3.size()>=dimensione_download)
+                                                 os<<file_part_tmp;
+                                                 os.close();
+                                                 downloaded=file_part_tmp.size();
+                                                 dimensione_download-=downloaded;
+                                                 if(dimensione_download==0)
                                                  {
-                                                     //scrivo il file interamente.
+                                                     download=false;
+                                                     downloaded=0;
+                                                     std::cout<<"\nDownload del file eseguito con successo, controllare nella propria cartella locale Download."<<std::endl;
                                                  }
+                                             }
+                                             else {
+                                                 std::cout << "Unable to open file";
                                              }
                                          }
 
-                                       }
+                                       //
 
                                        std::string login("CLIENT LOGGED\r\n");
                                        if (search.find(login)!=std::string::npos)

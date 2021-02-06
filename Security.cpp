@@ -12,6 +12,7 @@
 
 unsigned char key[crypto_secretbox_KEYBYTES] ={"pds_project_key"};
 unsigned char nonce[crypto_secretbox_NONCEBYTES]={};
+extern std::string file_path;
 // Redefine this to change to processing buffer size
 
 Security::~Security() = default;
@@ -113,12 +114,11 @@ for(;;) {
 
 void Security::getData() const
 {
-    std::string path_str;
     std::cout <<"Inseire path per favore: ";
-    std::cin >> path_str;
+    std::cin >> file_path;
     Message::message<MsgType> get_data;
     get_data.set_id(MsgType::GETPATH);
-    get_data << path_str;
+    get_data << file_path;
     get_data.sendMessage(socket);
 }
 
