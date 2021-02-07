@@ -12,14 +12,13 @@
 #include "Security.h"
 #include "FileWatcher.h"
 
-#define SECONDS 15
+#define SECONDS 150
 #define N 1024
 void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio::deadline_timer& timer);
 void start_new_connection(boost::asio::ip::tcp::socket& socket, boost::asio::ip::tcp::endpoint& endpoint);
 void file_watcher(Security const & security);
 void handler(const boost::system::error_code& error);
 std::mutex mutex;
-std::mutex mutex_response;
 std::condition_variable cv;
 bool ready = false;
 bool processed = false;
@@ -28,6 +27,7 @@ bool response=false;
 bool closed=false;
 bool on=true;
 bool download=false;
+bool dont_show=false;
 uint32_t dimensione_download;
 std::string file_path;
 std::string file_name;
@@ -297,6 +297,7 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio:
                                                            std::cout
                                                                    << "\nDownload del file eseguito con successo, controllare nella propria cartella locale Download."
                                                                    << std::endl;
+                                                           dont_show=true;
                                                        }
                                                    } else {
                                                        std::cout << "Unable to open file";
@@ -328,6 +329,7 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio:
                                                      download=false;
                                                      downloaded=0;
                                                      std::cout<<"\nDownload del file eseguito con successo, controllare nella propria cartella locale Download."<<std::endl;
+                                                     dont_show=true;
                                                  }
                                              }
                                              else {
@@ -495,7 +497,7 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio:
                                            std::cout<<"Timeout scaduto, inserire scelta se necessario: "<<std::endl;
                                        }
 
-                                       if(!download)
+                                       if(!download && !dont_show)
                                        {
                                            std::cout <<"\n\n Read " <<length << " bytes\n\n";
                                            for( int i=0; i<length; i++)
