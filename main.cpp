@@ -12,7 +12,7 @@
 #include "Security.h"
 #include "FileWatcher.h"
 
-#define SECONDS 60
+#define SECONDS 15
 #define N 1024
 void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio::deadline_timer& timer);
 void start_new_connection(boost::asio::ip::tcp::socket& socket, boost::asio::ip::tcp::endpoint& endpoint);
@@ -32,6 +32,7 @@ uint32_t dimensione_download;
 std::string file_path;
 std::string file_name;
 unsigned int downloaded;
+unsigned int counter;
 std::thread fw_thread;
 std::thread handler_thread;
 boost::system::error_code ec;
@@ -75,10 +76,12 @@ int main(int argc, char** argv) {
             std::string usr;
             std::string psw;
             Security security(usr, psw, socket);
+            /*
             timer.async_wait([&] ( const boost::system::error_code& ec ) {
                 handler_thread = std::thread(handler,ec);
                 handler_thread.detach();
             });
+             */
             getSomeData_asyn(security,vBuffer,timer);
             while(on)
             {
@@ -193,9 +196,7 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio:
                                [&](std::error_code ec,std::size_t length)
                                {
 
-                                   std::unique_lock<std::mutex> lk_r(mutex_response);
                                    response=true;
-                                   lk_r.unlock();
 
                                    timer.expires_from_now(boost::posix_time::seconds(SECONDS));
 
@@ -206,16 +207,9 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio:
                                        });
 
 
+
                                    if(!ec)
                                    {
-                                       std::cout <<"\n\n Read " <<length << " bytes\n\n";
-                                       for( int i=0; i<length; i++)
-                                       {
-                                           if(vBuffer[i]!='\a' && vBuffer[i]!='\b' && vBuffer[i]!=EOF)
-                                           std::cout << vBuffer[i];
-                                       }
-                                       std::cout<<std::endl;
-
                                        //logica applicativa
 
 
@@ -501,6 +495,17 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio:
                                            std::cout<<"Timeout scaduto, inserire scelta se necessario: "<<std::endl;
                                        }
 
+                                       if(!download)
+                                       {
+                                           std::cout <<"\n\n Read " <<length << " bytes\n\n";
+                                           for( int i=0; i<length; i++)
+                                           {
+                                               if(vBuffer[i]!='\a' && vBuffer[i]!='\b' && vBuffer[i]!=EOF)
+                                                   std::cout << vBuffer[i];
+                                           }
+                                           std::cout<<std::endl;
+                                       }
+
                                            getSomeData_asyn(security,vBuffer,timer); // isn't a real recursive but a system watching of network data.
                                    }
                                    else
@@ -522,25 +527,19 @@ void handler(const boost::system::error_code& error)
     boost::asio::io_context io;
     boost::asio::deadline_timer timer(io);
 
-    unsigned int counter=0;
     if (error!= boost::asio::error::operation_aborted)
     {
         // Timer was not cancelled, take necessary action.
         std::cout<<"\n\n\nNessuna risposta dopo "<<SECONDS<<" secondi"<<std::endl;
 
-        std::unique_lock<std::mutex> lk_r(mutex_response);
         response=false;
-        lk_r.unlock();
         // Manual unlocking is done before notifying, to avoid waking up
         // the waiting thread only to block again (see notify_one for details)
-
-        std::cout<<"In attesa di una risposta dal server...\n\n\n"<<std::endl;
-
+        counter=0;
         while(!response)
         {
           //finche resta qua , non risponde
           //controlla se il socket e' chiuso/
-
 
           if(closed)
           {
@@ -553,10 +552,10 @@ void handler(const boost::system::error_code& error)
               exit(EXIT_FAILURE);
           }
 
-          /*
           if(counter==3)
           {
-              logged=false;
+
+              //logged=false;
               if(fw_thread.joinable())
               {
                   fw_thread.join();
@@ -565,13 +564,14 @@ void handler(const boost::system::error_code& error)
               exit(EXIT_FAILURE);
           }
 
-            std::cout<<"In attesa di una risposta dal server...\n\n\n"<<std::endl;
 
+            std::cout<<"In attesa di una risposta dal server...\n\n\n"<<std::endl;
+            //sleep(10);
             menu();
             std::cout<<"Inserire input per provare a contattare il server: "<<std::endl;
 
 // Set an expiry time relative to now.
-           timer.expires_from_now(boost::posix_time::seconds(1));
+           timer.expires_from_now(boost::posix_time::seconds(10));
 
 // Wait for the timer to expire.
            timer.wait();
@@ -581,16 +581,7 @@ void handler(const boost::system::error_code& error)
            //qua dentro il server ha gia risposto e non e' morto
            //niente, i messaggi sono in coda
            std::cout<<"Risposta dal server ricevuta, continuare: "<<std::endl;
-           menu();
-
-           */
     }
-        //qua dentro il server ha gia risposto e non e' morto
-        //niente, i messaggi sono in coda
-        std::cout<<"Risposta dal server ricevuta, continuare: "<<std::endl;
-        //menu();
-}
-
 }
 
 void file_watcher(Security const & security)
