@@ -33,6 +33,7 @@ std::string file_path;
 std::string file_name;
 unsigned int downloaded;
 unsigned int counter;
+unsigned int scelta;
 std::thread fw_thread;
 std::thread handler_thread;
 boost::system::error_code ec;
@@ -71,7 +72,6 @@ int main(int argc, char** argv) {
 
         if(socket.is_open())
         {
-            unsigned int scelta;
             std::vector<char> vBuffer(N); //big buffer , regulate the speed and costs
             std::string usr;
             std::string psw;
@@ -216,16 +216,20 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio:
                                        std::string search(vBuffer.begin(),vBuffer.begin()+length);
 
 
-                                       if ( search.find('\a')!=std::string::npos) //buggato se mandi file
+                                       if(scelta!=3)
                                        {
-                                           std::cout << "Utente gia' presente nel sistema, inserire un diverso username" <<std::endl;
-                                           security.same_procedure(MsgType::REGISTER,true);
+                                           if ( search.find('\a')!=std::string::npos) //buggato se mandi file
+                                           {
+                                               std::cout << "Utente gia' presente nel sistema, inserire un diverso username" <<std::endl;
+                                               security.same_procedure(MsgType::REGISTER,true);
+                                           }
+                                           if ( search.find('\b')!=std::string::npos)
+                                           {
+                                               std::cout << "Login fallito, username o password sbagliate, riprovare" <<std::endl;
+                                               security.same_procedure(MsgType::LOGIN,true);
+                                           }
                                        }
-                                       if ( search.find('\b')!=std::string::npos)
-                                       {
-                                           std::cout << "Login fallito, username o password sbagliate, riprovare" <<std::endl;
-                                           security.same_procedure(MsgType::LOGIN,true);
-                                       }
+
 
                                        std::string registrazione("REGISTRAZIONE AVVENUTA\r\n");
                                        if (search.find(registrazione)!=std::string::npos)
