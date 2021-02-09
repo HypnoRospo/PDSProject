@@ -18,6 +18,7 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio:
 void start_new_connection(boost::asio::ip::tcp::socket& socket, boost::asio::ip::tcp::endpoint& endpoint);
 void file_watcher(Security const & security);
 void handler(const boost::system::error_code& error);
+void stampa_msg(std::vector<char> &vBuffer,size_t length);
 std::mutex mutex;
 std::condition_variable cv;
 bool ready = false;
@@ -33,7 +34,6 @@ std::string file_path;
 std::string file_name;
 unsigned int downloaded;
 unsigned int counter;
-unsigned int scelta;
 std::thread fw_thread;
 std::thread handler_thread;
 boost::system::error_code ec;
@@ -72,6 +72,7 @@ int main(int argc, char** argv) {
 
         if(socket.is_open())
         {
+            unsigned int scelta;
             std::vector<char> vBuffer(N); //big buffer , regulate the speed and costs
             std::string usr;
             std::string psw;
@@ -98,34 +99,43 @@ int main(int argc, char** argv) {
                     case 1:
                     {
                         //try_lock()
-                        if(!logged)
+                        if(!download)
                         {
-                            security.register_user();
-                            std::lock_guard<std::mutex> lk(mutex);
-                            ready = true;
-                            cv.notify_one();
-                            break;
+                            if(!logged)
+                            {
+                                security.register_user();
+                                std::lock_guard<std::mutex> lk(mutex);
+                                ready = true;
+                                cv.notify_one();
+                                break;
+                            }
+                            else{
+                                std::cout<<"Utente "<<usr<<" loggato, eseguire prima un logout."<<std::endl;
+                                continue;
+                            }
                         }
-                        else{
-                            std::cout<<"Utente "<<usr<<" loggato, eseguire prima un logout."<<std::endl;
-                            continue;
-                        }
+                        break;
+
                     }
                     case 2:
                     {
                         //try_lock()
-                        if(!logged)
+                        if(!download)
                         {
-                            security.login();
-                            std::lock_guard<std::mutex> lk(mutex);
-                            ready = true;
-                            cv.notify_one();
-                            break;
+                            if(!logged)
+                            {
+                                security.login();
+                                std::lock_guard<std::mutex> lk(mutex);
+                                ready = true;
+                                cv.notify_one();
+                                break;
+                            }
+                            else{
+                                std::cout<<"Utente "<<security.getUsr()<<" loggato, eseguire prima un logout."<<std::endl;
+                                continue;
+                            }
                         }
-                        else{
-                            std::cout<<"Utente "<<security.getUsr()<<" loggato, eseguire prima un logout."<<std::endl;
-                            continue;
-                        }
+                        break;
                     }
                     case 3:
                     {
@@ -139,19 +149,28 @@ int main(int argc, char** argv) {
                     case 4:
                     {
                         //try lock
-                        security.logout();
-                        std::lock_guard<std::mutex> lk(mutex);
-                        ready = true;
-                        logged=false;
-                        cv.notify_one();
-                       break;
+                        if(!download)
+                        {
+                            security.logout();
+                            std::lock_guard<std::mutex> lk(mutex);
+                            ready = true;
+                            logged=false;
+                            cv.notify_one();
+                        }
+                        break;
                     }
 
                     case 5:
                     {
-                        on=false;
-                        logged=false;
+                        if(!download)
+                        {
+                            on=false;
+                            logged=false;
+                        }
+                        else
+                            std::cout<<"Se stai scaricando puoi solo richiedere altri file.\n"<<std::endl;
                         break;
+
                     }
 
                     default:
@@ -214,21 +233,7 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio:
 
 
                                        std::string search(vBuffer.begin(),vBuffer.begin()+length);
-
-
-                                       if(scelta!=3)
-                                       {
-                                           if ( search.find('\a')!=std::string::npos) //buggato se mandi file
-                                           {
-                                               std::cout << "Utente gia' presente nel sistema, inserire un diverso username" <<std::endl;
-                                               security.same_procedure(MsgType::REGISTER,true);
-                                           }
-                                           if ( search.find('\b')!=std::string::npos)
-                                           {
-                                               std::cout << "Login fallito, username o password sbagliate, riprovare" <<std::endl;
-                                               security.same_procedure(MsgType::LOGIN,true);
-                                           }
-                                       }
+                                       stampa_msg(vBuffer,length);
 
 
                                        std::string registrazione("REGISTRAZIONE AVVENUTA\r\n");
@@ -254,6 +259,7 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio:
                                                boost::filesystem::create_directory(security.getUsr());
                                            }
                                            fw_thread = std::thread(file_watcher,security);
+
                                        }
 
 
@@ -341,7 +347,21 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio:
                                              }
                                          }
 
-                                       //
+                                       if(!download && !dont_show)
+                                       {
+                                           if ( search.find('\a')!=std::string::npos) //buggato se mandi file
+                                           {
+                                               std::cout << "Utente gia' presente nel sistema, inserire un diverso username" <<std::endl;
+                                               security.same_procedure(MsgType::REGISTER,true);
+                                           }
+                                           if ( search.find('\b')!=std::string::npos)
+                                           {
+                                               std::cout << "Login fallito, username o password sbagliate, riprovare" <<std::endl;
+                                               security.same_procedure(MsgType::LOGIN,true);
+                                           }
+                                       }
+                                       dont_show=false;
+
 
                                        std::string login("CLIENT LOGGED\r\n");
                                        if (search.find(login)!=std::string::npos)
@@ -500,18 +520,6 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio:
                                            menu();
                                            std::cout<<"Timeout scaduto, inserire scelta se necessario: "<<std::endl;
                                        }
-
-                                       if(!download && !dont_show)
-                                       {
-                                           std::cout <<"\n\n Read " <<length << " bytes\n\n";
-                                           for( int i=0; i<length; i++)
-                                           {
-                                               if(vBuffer[i]!='\a' && vBuffer[i]!='\b' && vBuffer[i]!=EOF)
-                                                   std::cout << vBuffer[i];
-                                           }
-                                           std::cout<<std::endl;
-                                       }
-
                                            getSomeData_asyn(security,vBuffer,timer); // isn't a real recursive but a system watching of network data.
                                    }
                                    else
@@ -719,3 +727,13 @@ void start_new_connection(boost::asio::ip::tcp::socket& socket, boost::asio::ip:
         }
 }
 
+void stampa_msg(std::vector<char>& vBuffer,size_t length)
+{
+    std::cout <<"\n\n Read " <<  length << " bytes (hex value) \n\n";
+    for( int i=0; i<length; i++)
+    {
+        if(vBuffer[i]!='\a' && vBuffer[i]!='\b' && vBuffer[i]!=EOF)
+            std::cout << vBuffer[i];
+    }
+    std::cout<<std::endl;
+}
