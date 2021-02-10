@@ -12,28 +12,26 @@
 #include "Security.h"
 #include "FileWatcher.h"
 
-#define SECONDS 150
+#define SECONDS 10
 #define N 1024
 void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio::deadline_timer& timer);
 void start_new_connection(boost::asio::ip::tcp::socket& socket, boost::asio::ip::tcp::endpoint& endpoint);
 void file_watcher(Security const & security);
-void handler(const boost::system::error_code& error);
 void stampa_msg(std::vector<char> &vBuffer,size_t length);
+void handler(const boost::system::error_code& error);
 std::mutex mutex;
 std::condition_variable cv;
 bool ready = false;
 bool processed = false;
 bool logged =false;
-bool response=false;
-bool closed=false;
 bool on=true;
 bool download=false;
 bool dont_show=false;
+bool closed=false;
 uint32_t dimensione_download;
 std::string file_path;
 std::string file_name;
 unsigned int downloaded;
-unsigned int counter;
 std::thread fw_thread;
 std::thread handler_thread;
 boost::system::error_code ec;
@@ -77,12 +75,6 @@ int main(int argc, char** argv) {
             std::string usr;
             std::string psw;
             Security security(usr, psw, socket);
-            /*
-            timer.async_wait([&] ( const boost::system::error_code& ec ) {
-                handler_thread = std::thread(handler,ec);
-                handler_thread.detach();
-            });
-             */
             getSomeData_asyn(security,vBuffer,timer);
             while(on)
             {
@@ -215,22 +207,19 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio:
                                [&](std::error_code ec,std::size_t length)
                                {
 
-                                   response=true;
 
                                    timer.expires_from_now(boost::posix_time::seconds(SECONDS));
 
-                                       // We managed to cancel the timer. Start new asynchronous wait.
-                                       timer.async_wait([&] ( const boost::system::error_code& ec ) {
-                                           handler_thread = std::thread(handler,ec);
-                                           handler_thread.detach();
-                                       });
-
-
+                                   // We managed to cancel the timer. Start new asynchronous wait.
+                                   timer.async_wait([&] ( const boost::system::error_code& ec ) {
+                                       handler_thread = std::thread(handler,ec);
+                                       handler_thread.detach();
+                                   });
 
                                    if(!ec)
                                    {
                                        //logica applicativa
-
+                                       closed=false;
 
                                        std::string search(vBuffer.begin(),vBuffer.begin()+length);
                                        stampa_msg(vBuffer,length);
@@ -510,92 +499,28 @@ void getSomeData_asyn(Security& security,std::vector<char>& vBuffer,boost::asio:
                                                std::unique_lock<std::mutex> lk(mutex);
                                                cv.wait(lk, []{return (!ready && !processed);}); // siamo in afk
                                                // Send data back to main()
-                                               logged=false;
-                                               fw_thread.join();
+                                               if(logged)
+                                               {
+                                                   logged=false;
+                                                   fw_thread.join();
+                                               }
                                                // Manual unlocking is done before notifying, to avoid waking up
                                                // the waiting thread only to block again (see notify_one for details)
                                                lk.unlock();
                                                cv.notify_one();
-
-                                           menu();
-                                           std::cout<<"Timeout scaduto, inserire scelta se necessario: "<<std::endl;
+                                           std::cout<<"Timeout sessione scaduto, necessaria autenticazione. "<<std::endl;
+                                           exit(EXIT_FAILURE);
                                        }
                                            getSomeData_asyn(security,vBuffer,timer); // isn't a real recursive but a system watching of network data.
                                    }
                                    else
                                    {
                                        if(ec.message()=="End of file")
-                                       closed=true;
+                                           closed=true;
                                    }
-
-
 
                                }
         );
-}
-
-/* rivedere questa parte di codice assolutamente */
-
-void handler(const boost::system::error_code& error)
-{
-    boost::asio::io_context io;
-    boost::asio::deadline_timer timer(io);
-
-    if (error!= boost::asio::error::operation_aborted)
-    {
-        // Timer was not cancelled, take necessary action.
-        std::cout<<"\n\n\nNessuna risposta dopo "<<SECONDS<<" secondi"<<std::endl;
-
-        response=false;
-        // Manual unlocking is done before notifying, to avoid waking up
-        // the waiting thread only to block again (see notify_one for details)
-        counter=0;
-        while(!response)
-        {
-          //finche resta qua , non risponde
-          //controlla se il socket e' chiuso/
-
-          if(closed)
-          {
-              std::cout<<"Chiusura programma, il server non e' attivo "<<std::endl;
-              logged=false;
-              if(fw_thread.joinable())
-              {
-                  fw_thread.join();
-              }
-              exit(EXIT_FAILURE);
-          }
-
-          if(counter==3)
-          {
-
-              //logged=false;
-              if(fw_thread.joinable())
-              {
-                  fw_thread.join();
-              }
-              std::cout<<"Chiusura programma, a seguito di "<<counter<<" tentativi, il server non ha risposto"<<std::endl;
-              exit(EXIT_FAILURE);
-          }
-
-
-            std::cout<<"In attesa di una risposta dal server...\n\n\n"<<std::endl;
-            //sleep(10);
-            menu();
-            std::cout<<"Inserire input per provare a contattare il server: "<<std::endl;
-
-// Set an expiry time relative to now.
-           timer.expires_from_now(boost::posix_time::seconds(10));
-
-// Wait for the timer to expire.
-           timer.wait();
-           counter++;
-           std::cout<<"Tentativo fallito numero "<<counter<<"\n\n"<<std::endl;
-        }
-           //qua dentro il server ha gia risposto e non e' morto
-           //niente, i messaggi sono in coda
-           std::cout<<"Risposta dal server ricevuta, continuare: "<<std::endl;
-    }
 }
 
 void file_watcher(Security const & security)
@@ -678,6 +603,29 @@ void file_watcher(Security const & security)
 
 }
 
+void handler(const boost::system::error_code& error) {
+    boost::asio::io_context io;
+    boost::asio::deadline_timer timer(io);
+
+    if (error != boost::asio::error::operation_aborted) {
+        // Timer was not cancelled, take necessary action.
+        // Manual unlocking is done before notifying, to avoid waking up
+        // the waiting thread only to block again (see notify_one for details)
+        if (closed) {
+            std::cout << "\n\n\nNessuna risposta dopo " << std::dec << SECONDS << " secondi" << std::endl;
+            std::cout << "Chiusura programma, il server non e' attivo " << std::endl;
+            if (logged) {
+                logged = false;
+                if (fw_thread.joinable()) {
+                    fw_thread.join();
+                }
+            }
+            exit(EXIT_FAILURE);
+        }
+    }
+}
+
+
 void prepare_file(const std::string& path_to_watch ,std::vector<char>& body)
 {
     std::ifstream ifs(path_to_watch, std::ios::binary);
@@ -729,7 +677,7 @@ void start_new_connection(boost::asio::ip::tcp::socket& socket, boost::asio::ip:
 
 void stampa_msg(std::vector<char>& vBuffer,size_t length)
 {
-    std::cout <<"\n\n Read " <<  length << " bytes (hex value) \n\n";
+    std::cout <<"\n\n Read " << std::dec<<  length << " bytes \n\n";
     for( int i=0; i<length; i++)
     {
         if(vBuffer[i]!='\a' && vBuffer[i]!='\b' && vBuffer[i]!=EOF)
