@@ -22,7 +22,7 @@
 
 enum class MsgType : uint32_t
 {
-    NONCE,GETPATH,LOGIN,LOGOUT,REGISTER,CRC,ERROR,TRY_AGAIN_REGISTER,TRY_AGAIN_LOGIN,NEW_FILE,DELETE
+    NONCE,GETPATH,LOGIN,LOGOUT,REGISTER,CRC,ERROR,TRY_AGAIN_REGISTER,TRY_AGAIN_LOGIN,NEW_FILE,DELETE,END
 };
 
 namespace Message {
@@ -132,6 +132,8 @@ struct message
                 return 9;
             case(MsgType::DELETE):
                 return 10;
+            case(MsgType::END):
+                return 11;
 
             default:
                 return 6;//-1
@@ -147,7 +149,7 @@ struct message
         boost::asio::write(socket, boost::asio::buffer(&(size_net), sizeof(size_net)), errorCode);
         if(!errorCode.failed())
         boost::asio::write(socket, boost::asio::buffer(&(header_net), sizeof(header_net)), errorCode);
-        if(!errorCode.failed() && (this->header.id != MsgType::LOGOUT))
+        if(!errorCode.failed() && (this->header.id != MsgType::LOGOUT)&& (this->header.id != MsgType::END))
             boost::asio::write(socket, boost::asio::buffer(this->body.data(), this->body.size()), errorCode);
         return errorCode;
     }

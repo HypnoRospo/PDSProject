@@ -30,6 +30,7 @@ public:
      void  register_user() const;
      void getData() const;
      void logout() const;
+     void end() const;
     void same_procedure(MsgType msgType,bool repeat) const;
     virtual ~Security();
     static std::string calculate_checksum(std::ifstream& ifs);

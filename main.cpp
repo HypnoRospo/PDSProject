@@ -156,8 +156,11 @@ int main(int argc, char** argv) {
                     {
                         if(!download)
                         {
+                            security.end();
+                            std::lock_guard<std::mutex> lk(mutex);
                             on=false;
                             logged=false;
+                            cv.notify_one();
                         }
                         else
                             std::cout<<"Se stai scaricando puoi solo richiedere altri file.\n"<<std::endl;

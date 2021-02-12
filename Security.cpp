@@ -130,6 +130,14 @@ void Security::logout() const
     std::cout<<"Logout di user = "<<usr<<std::endl;
 }
 
+void Security::end() const
+{
+    Message::message<MsgType> fine;
+    fine.set_id(MsgType::END);
+    fine.sendMessage(socket);
+}
+
+
 
 boost::asio::ip::tcp::socket &Security::getSocket() const {
     return socket;
