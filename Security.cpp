@@ -48,7 +48,6 @@ void Security::same_procedure(MsgType msgType,bool thread) const
     //form
     if(logged)
         return;
-//todo user & password check with for(;;) loop , lenght and propers characters
 for(;;) {
     std::cout << "Inserire nome utente o exit per uscire: ";
     std::cin >> usr;
@@ -195,7 +194,6 @@ std::string Security::calculate_checksum(std::ifstream &ifs) {
     {
         std::cerr << "Found an exception with '" << e.what() << "'." << std::endl;
         return e.what();
-        /* VA GESTITA LA RETURN ADATTA */
     }
 
 }
